@@ -6,7 +6,7 @@
  * it fires while the user is reading the chat, so it must name a position in
  * the draft itself.
  *
- * @module @haoran/dsh-quote-message/core/draft
+ * @module @sumomok/dsh-quote-message/core/draft
  */
 
 /** A zero-width position in draft character coordinates. */

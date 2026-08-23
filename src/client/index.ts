@@ -1,5 +1,5 @@
 /**
- * Browser half of @haoran/dsh-quote-message.
+ * Browser half of @sumomok/dsh-quote-message.
  *
  * Two ways to cite the current session, one reference kind:
  * - a selection pill (`conversation.input.dock` entry, see QuoteDock.tsx);
@@ -11,7 +11,7 @@
  * quote reaches the model as part of the ordinary prompt, expanded by the
  * codec below when the composer submits.
  *
- * @module @haoran/dsh-quote-message/client
+ * @module @sumomok/dsh-quote-message/client
  */
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'

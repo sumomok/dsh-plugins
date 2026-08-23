@@ -1,5 +1,5 @@
 {
-  "name": "@haoran/dsh-quote-message",
+  "name": "@sumomok/dsh-quote-message",
   "description": "Quote earlier content of the current session into the composer: select any passage in the chat, or pick a whole message with @message, and a native reference chip carries the text into the prompt",
   "version": "0.1.0",
   "type": "module",
@@ -28,7 +28,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/haoran/dsh-plugins",
+    "url": "https://github.com/sumomok/dsh-plugins",
     "directory": "packages/quote-message"
   },
   "keywords": [

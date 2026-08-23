@@ -1,4 +1,4 @@
-# @haoran/dsh-quote-message
+# @sumomok/dsh-quote-message
 
 English | [中文](README.zh.md)
 
@@ -50,10 +50,10 @@ Nothing else is injected. The blockquote is part of your prompt, and the host lo
 ```sh
 pnpm run build
 cd packages/quote-message && pnpm pack --pack-destination ../../dist
-dsh plugin --profile <name> add ../../dist/haoran-dsh-quote-message-0.1.0.tgz
+dsh plugin --profile <name> add ../../dist/sumomok-dsh-quote-message-0.1.0.tgz
 ```
 
-Once published, `dsh plugin --profile <name> add @haoran/dsh-quote-message` installs the same thing from npm.
+Once published, `dsh plugin --profile <name> add @sumomok/dsh-quote-message` installs the same thing from npm.
 
 The manifest declares `dsh.bundle.patch`, so the install appends the package to the profile's `dsh.profile.bundles` and its patch layer mounts the plugin; nothing needs to be added to the profile's own `cordis.patch.yml`. Install the tarball rather than a `link:` path — a linked copy resolves its own `@deepseek-ai/*` and loads a second cordis, which gives the plugin a different service registry than the one the application runs on.
 

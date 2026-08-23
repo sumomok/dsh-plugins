@@ -4,7 +4,7 @@
  * no host services, so both entry points (selection pill and `@message`
  * picker) and the codec share one implementation.
  *
- * @module @haoran/dsh-quote-message/core/quote
+ * @module @sumomok/dsh-quote-message/core/quote
  */
 
 /** Role of the quoted message, as the header names it. */

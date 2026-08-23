@@ -7,7 +7,7 @@
  * The walk is typed against the two members it uses rather than `Element`, so
  * it is exercised by plain objects and needs no DOM at test time.
  *
- * @module @haoran/dsh-quote-message/core/chat-dom
+ * @module @sumomok/dsh-quote-message/core/chat-dom
  */
 
 /** The element members the walk reads. A real DOM `Element` satisfies it. */

@@ -3,7 +3,7 @@
  * reference path can seat, and how it reaches a session's composer from
  * outside the trigger pipeline.
  *
- * @module @haoran/dsh-quote-message/client/reference
+ * @module @sumomok/dsh-quote-message/client/reference
  */
 import type { ClientContext, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ReferenceInsert, TokenSpan } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
