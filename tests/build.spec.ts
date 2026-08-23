@@ -4,16 +4,22 @@
  * and the patch row are checked against each other rather than described in
  * prose only.
  *
- * Run `pnpm --filter @sumomok/dsh-edit-rerun run build` first; these assertions
- * read `lib/`.
+ * The package's own bundler runs here rather than being assumed, so these
+ * assertions read artifacts this suite produced and `vitest run` on a
+ * never-built checkout still exercises them.
  */
+import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import manifest from '../package.json' with { type: 'json' }
 
 const pkgRoot = fileURLToPath(new URL('..', import.meta.url))
 const read = (relative: string): string => readFileSync(pkgRoot + relative, 'utf8')
+
+beforeAll(() => {
+  execFileSync(process.execPath, [pkgRoot + 'scripts/build.mjs'], { cwd: pkgRoot, stdio: 'inherit' })
+}, 180_000)
 
 describe('package manifest', () => {
   it('declares both a bundle patch and a client half', () => {
