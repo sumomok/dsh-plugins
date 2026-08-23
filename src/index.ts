@@ -19,7 +19,7 @@
  * It registers no HTTP route. The browser half reaches it only through the
  * harness's `/api` Typert gateway, and every exported method is a read.
  *
- * @module @haoran/dsh-balance
+ * @module @sumomok/dsh-balance
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -33,6 +33,7 @@ import type {} from '@deepseek-ai/dsh-session-projection'
 import { balanceEndpoint, BalanceReader, type BalanceRequest } from './balance.ts'
 import { resolveBalanceConfig, type Config, type ResolvedConfig } from './config.ts'
 import { Ledger, ledgerPath, type LedgerRow } from './ledger.ts'
+import { pricesFor, selectPriceCurrency, type PriceEntry, type PriceTable } from './prices.ts'
 import { priceStep, sessionSpendProjection } from './session-spend.ts'
 import { AccountBalanceService } from './service.ts'
 import type { BalanceView, SpendView } from './types.ts'
@@ -45,11 +46,11 @@ export { DEFAULT_PRICES } from './default-prices.ts'
 export { dayKey, hostTimezone, Ledger, LEDGER_DIR, LEDGER_FILE, LEDGER_MODE, ledgerPath, parseLedgerRow } from './ledger.ts'
 export type { LedgerOptions, LedgerRow } from './ledger.ts'
 export {
-  costOf, DEFAULT_BASE_SCHEDULE_NAME, isSupportedTimezone, isWallClockTime,
-  resolvePriceTable, resolveRates, wallClockAt, windowContains,
+  costOf, DEFAULT_BASE_SCHEDULE_NAME, isSupportedTimezone, isWallClockTime, pricesFor,
+  resolvePriceTable, resolveRates, selectPriceCurrency, wallClockAt, windowContains,
 } from './prices.ts'
 export type {
-  PriceEntry, PriceRates, PriceSchedule, PriceSubject, PriceTable, PriceWindow,
+  CurrencyPrices, PriceEntry, PriceRates, PriceSchedule, PriceSubject, PriceTable, PriceWindow,
   ResolvedPrice, ResolvedRates, TokenCounts,
 } from './prices.ts'
 export { AccountBalanceService } from './service.ts'
@@ -125,40 +126,111 @@ export function providerResolver(
   }
 }
 
+/**
+ * Which currency's price list spend is computed against.
+ *
+ * The account's own billing currency decides it once a balance read reveals
+ * one, because a CNY balance beside a USD spend total is two numbers nobody
+ * can compare. Until then — and for an account whose currency the table does
+ * not price — the configured preference decides. A change re-prices
+ * everything, so listeners re-register what they derived from the old list.
+ */
+export class ActivePrices {
+  private readonly table: PriceTable
+  private readonly preference: readonly string[]
+  private readonly listeners = new Set<(currency: string) => void>()
+  private code: string
+
+  /**
+   * @param table - the resolved price table.
+   * @param preference - configured currency preference, most wanted first.
+   */
+  constructor(table: PriceTable, preference: readonly string[]) {
+    this.table = table
+    this.preference = preference
+    // Validation guarantees at least one priced currency, so the selection
+    // cannot come back empty here.
+    this.code = selectPriceCurrency(table, { preference }) ?? ''
+  }
+
+  /** The active ISO 4217 code. */
+  get currency(): string {
+    return this.code
+  }
+
+  /** The active currency's price list. */
+  get entries(): readonly PriceEntry[] {
+    return pricesFor(this.table, this.code)
+  }
+
+  /**
+   * Adopt the account's own billing currency when a balance read reveals it.
+   * @param view - the balance read; anything but a successful one is ignored.
+   */
+  observe(view: BalanceView): void {
+    if (view.state !== 'ok') return
+    const next = selectPriceCurrency(this.table, {
+      balanceCurrency: view.currency,
+      preference: this.preference,
+    })
+    if (next === undefined || next === this.code) return
+    this.code = next
+    for (const listener of [...this.listeners]) listener(next)
+  }
+
+  /**
+   * Subscribe to currency changes.
+   * @param listener - receives the new ISO 4217 code.
+   * @returns the unsubscriber.
+   */
+  onChange(listener: (currency: string) => void): () => void {
+    this.listeners.add(listener)
+    return () => { this.listeners.delete(listener) }
+  }
+}
+
 /** The concrete provider of the `accountBalance` capability. */
 class BalanceProvider extends AccountBalanceService {
   private readonly reader: BalanceReader
   private readonly ledger: Ledger
+  private readonly active: ActivePrices
 
   /**
    * @param ctx - owning plugin context.
    * @param reader - the cached balance reader.
    * @param ledger - the spend ledger backing the aggregates.
+   * @param active - the active currency selection, which every read updates.
    */
-  constructor(ctx: Context, reader: BalanceReader, ledger: Ledger) {
+  constructor(ctx: Context, reader: BalanceReader, ledger: Ledger, active: ActivePrices) {
     super(ctx)
     this.reader = reader
     this.ledger = ledger
+    this.active = active
   }
 
-  override get(force?: boolean): Promise<BalanceView> {
-    return this.reader.get(force ?? false)
+  override async get(force?: boolean): Promise<BalanceView> {
+    const view = await this.reader.get(force ?? false)
+    // The read is where the account's own billing currency becomes known.
+    this.active.observe(view)
+    return view
   }
 
   override spend(): Promise<SpendView> {
-    return Promise.resolve(this.ledger.spend())
+    return Promise.resolve(this.ledger.spend(this.active.currency))
   }
 }
 
 /**
  * Turn one logged assistant step into a ledger row.
- * @param config - the resolved plugin config, for the price table.
+ * @param active - the active currency selection, supplying the price list the
+ * row is written in; a row records the currency it was priced in so a later
+ * switch cannot fold it into another currency's total.
  * @param session - the session the step belonged to.
  * @param event - the `assistant/message` event carrying the step's usage.
  * @returns the row, or `null` when the step reported no usage.
  */
 export function ledgerRowOf(
-  config: ResolvedConfig,
+  active: ActivePrices,
   session: Pick<Session, 'id'>,
   event: SessionEvent,
 ): LedgerRow | null {
@@ -166,7 +238,7 @@ export function ledgerRowOf(
   const { usage, message } = event.data
   if (usage === undefined) return null
   const { provider, model } = message.source
-  const priced = priceStep(config.prices, { provider, model }, event.time, usage)
+  const priced = priceStep(active.entries, { provider, model }, event.time, usage)
   return {
     t: event.time,
     sessionId: session.id,
@@ -179,7 +251,7 @@ export function ledgerRowOf(
     output: priced.counts.output,
     reasoning: priced.counts.reasoning,
     cost: priced.cost ?? 0,
-    currency: config.prices.currency,
+    currency: active.currency,
     schedule: priced.scheduleName ?? '',
     ...priced.cost === null ? { unpriced: true as const } : {},
   }
@@ -192,12 +264,12 @@ export function ledgerRowOf(
  */
 export async function apply(ctx: Context, config: Config): Promise<void> {
   const resolved = resolveBalanceConfig(config, dshHomePath)
+  const active = new ActivePrices(resolved.prices, resolved.currency)
   const ledger = new Ledger({
     file: ledgerPath(resolved.root),
     now: () => Date.now(),
     timezone: resolved.timezone,
     retentionDays: resolved.ledgerDays,
-    currency: resolved.prices.currency,
     pricesAsOf: resolved.prices.asOf,
     ui: {
       footer: resolved.footer,
@@ -218,15 +290,29 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     retryMs: resolved.retryMs,
     fetch: globalThis.fetch,
   })
-  new BalanceProvider(ctx, reader, ledger)
+  new BalanceProvider(ctx, reader, ledger, active)
 
   // Per-session spend is a pure fold the registry replays and caches; the
   // registry is optional, and a composition without it simply has no
-  // per-session line.
+  // per-session line. The fold closes over one currency's price list, so a
+  // currency change re-registers it — which is also what discards the folds
+  // computed at the previous rates.
   ctx.inject(['sessionProjections'], (projectionCtx) => {
-    projectionCtx.sessionProjections.register(
-      sessionSpendProjection(resolved.prices, resolved.prices.currency),
+    let dispose = projectionCtx.sessionProjections.register(
+      sessionSpendProjection(active.entries, active.currency),
     )
+    projectionCtx.effect(() => {
+      const stop = active.onChange(() => {
+        dispose()
+        dispose = projectionCtx.sessionProjections.register(
+          sessionSpendProjection(active.entries, active.currency),
+        )
+      })
+      return () => {
+        stop()
+        dispose()
+      }
+    }, 'dsh-balance: session spend projection')
   })
 
   // The ledger observes the post-commit session feed rather than wrapping the
@@ -241,7 +327,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     sessionCtx.on('session/event', (session: Session, event: SessionEvent) => {
       const last = folded.get(session)
       if (last !== undefined && event.seq <= last) return
-      const row = ledgerRowOf(resolved, session, event)
+      const row = ledgerRowOf(active, session, event)
       if (row === null) return
       folded.set(session, event.seq)
       void ledger.append(row).catch((error: unknown) => { ctx.logger.error(error) })

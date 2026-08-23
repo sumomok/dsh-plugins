@@ -3,7 +3,7 @@
  * manifest. Nothing here carries a secret, a URL, or a raw network error text:
  * every value in this module is something the browser is allowed to render.
  *
- * @module @haoran/dsh-balance/types
+ * @module @sumomok/dsh-balance/types
  */
 
 /** Why a balance read could not produce numbers. */

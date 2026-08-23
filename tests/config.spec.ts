@@ -21,7 +21,8 @@ describe('the schema', () => {
     expect(settled.criticalBalance).toBe(1)
     expect(settled.ledgerDays).toBe(400)
     expect(settled.surfaces).toEqual({ footer: true, sessionSpend: true })
-    expect(settled.prices?.entries).toHaveLength(3)
+    expect(Object.keys(settled.prices?.tables ?? {}).sort()).toEqual(['CNY', 'USD'])
+    expect(settled.prices?.tables.CNY?.entries).toHaveLength(3)
   })
 
   it('rejects a poll faster than the floor, which would hammer the provider', () => {
@@ -36,12 +37,27 @@ describe('the schema', () => {
     const settled = Config({
       prices: {
         asOf: '2027-01-01',
-        currency: 'EUR',
-        entries: [{ model: 'x', per: 1_000, timezone: 'UTC', base: { input: 1, inputCacheHit: 1, output: 1 } }],
+        tables: {
+          EUR: { entries: [{ model: 'x', per: 1_000, timezone: 'UTC', base: { input: 1, inputCacheHit: 1, output: 1 } }] },
+        },
       },
     })
-    expect(settled.prices?.currency).toBe('EUR')
-    expect(settled.prices?.entries[0]?.model).toBe('x')
+    expect(Object.keys(settled.prices?.tables ?? {})).toEqual(['EUR'])
+    expect(settled.prices?.tables.EUR?.entries[0]?.model).toBe('x')
+  })
+
+  it('takes a currency the shipped default does not price', () => {
+    const settled = Config({
+      prices: {
+        asOf: '2027-01-01',
+        tables: {
+          CNY: { entries: [{ model: 'x', per: 1_000, timezone: 'UTC', base: { input: 1, inputCacheHit: 1, output: 1 } }] },
+          JPY: { entries: [{ model: 'x', per: 1_000, timezone: 'Asia/Tokyo', base: { input: 20, inputCacheHit: 2, output: 60 } }] },
+        },
+      },
+    })
+    const resolved = resolveBalanceConfig(settled, home)
+    expect(Object.keys(resolved.prices.tables).sort()).toEqual(['CNY', 'JPY'])
   })
 })
 
@@ -74,14 +90,17 @@ describe('resolveBalanceConfig', () => {
   it('rejects a price table the arithmetic cannot use, at load', () => {
     const broken = {
       asOf: '2026-08-23',
-      currency: 'USD',
-      entries: [{
-        model: 'x',
-        per: 1_000,
-        timezone: 'UTC',
-        base: { input: 1, inputCacheHit: 1, output: 1 },
-        schedules: [{ name: 'y', windows: [{ start: '25:00', end: '02:00' }], multiplier: 2 }],
-      }],
+      tables: {
+        USD: {
+          entries: [{
+            model: 'x',
+            per: 1_000,
+            timezone: 'UTC',
+            base: { input: 1, inputCacheHit: 1, output: 1 },
+            schedules: [{ name: 'y', windows: [{ start: '25:00', end: '02:00' }], multiplier: 2 }],
+          }],
+        },
+      },
     } as unknown as PriceTable
     expect(() => resolveBalanceConfig(Config({ prices: broken }), home)).toThrow(/not HH:MM/)
   })
@@ -97,7 +116,7 @@ describe('the bundle patch', () => {
   const patch = readFileSync(fileURLToPath(new URL('../cordis.patch.yml', import.meta.url)), 'utf8')
 
   it('names this package, so the profile resolves the row it installed', () => {
-    expect(patch).toContain("name: '@haoran/dsh-balance'")
+    expect(patch).toContain("name: '@sumomok/dsh-balance'")
   })
 
   it('restates every default, because a profile patch replaces the whole config block', () => {
@@ -114,16 +133,26 @@ describe('the bundle patch', () => {
     const row = layer[0]?.insert[0]
     expect(row?.id).toBe('balance')
     const resolved = resolveBalanceConfig(Config(row?.config as never), home)
-    expect(resolved.prices.entries).toHaveLength(DEFAULT_PRICES.entries.length)
     expect(resolved.prices.asOf).toBe(DEFAULT_PRICES.asOf)
     expect(resolved.refreshMs).toBe(60_000)
+    // The YAML must carry the same numbers the module does, currency for
+    // currency: a drift between them ships a plugin that prices differently
+    // than its own default says it does.
+    for (const currency of Object.keys(DEFAULT_PRICES.tables)) {
+      expect(resolved.prices.tables[currency]?.entries, currency)
+        .toEqual(DEFAULT_PRICES.tables[currency]?.entries)
+    }
+    expect(Object.keys(resolved.prices.tables).sort()).toEqual(Object.keys(DEFAULT_PRICES.tables).sort())
   })
 
-  it('states the same numbers the shipped table carries', () => {
+  it('states the same numbers the shipped tables carry', () => {
     expect(patch).toContain(`asOf: '${DEFAULT_PRICES.asOf}'`)
-    for (const entry of DEFAULT_PRICES.entries) {
-      expect(patch).toContain(`model: ${entry.model}`)
-      expect(patch).toContain(`input: ${String(entry.base.input)}`)
+    for (const [currency, list] of Object.entries(DEFAULT_PRICES.tables)) {
+      expect(patch).toContain(`${currency}:`)
+      for (const entry of list.entries) {
+        expect(patch).toContain(`model: ${entry.model}`)
+        expect(patch).toContain(`input: ${String(entry.base.input)}`)
+      }
     }
   })
 })

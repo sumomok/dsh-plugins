@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { TokenUsage } from '@deepseek-ai/dsh-llm'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { DEFAULT_PRICES } from '../src/default-prices.ts'
-import type { PriceTable } from '../src/prices.ts'
+import { pricesFor } from '../src/prices.ts'
+import type { PriceEntry } from '../src/prices.ts'
 import {
   billingBuckets, priceStep, priceTableVersion, SESSION_SPEND_KEY, sessionSpendProjection, totalTokens,
 } from '../src/session-spend.ts'
@@ -12,19 +13,15 @@ const PEAK = Date.UTC(2026, 7, 19, 2, 30)
 /** The same Wednesday, outside it. */
 const OFF_PEAK = Date.UTC(2026, 7, 19, 12, 0)
 
-const TABLE: PriceTable = {
-  asOf: '2026-08-23',
-  currency: 'USD',
-  entries: [{
-    model: 'm',
-    provider: 'p',
-    per: 1_000_000,
-    timezone: 'UTC',
-    baseName: 'off-peak',
-    base: { input: 1, inputCacheHit: 0.1, output: 3 },
-    schedules: [{ name: 'peak', multiplier: 2, windows: [{ start: '01:00', end: '04:00', days: [1, 2, 3, 4, 5] }] }],
-  }],
-}
+const TABLE: PriceEntry[] = [{
+  model: 'm',
+  provider: 'p',
+  per: 1_000_000,
+  timezone: 'UTC',
+  baseName: 'off-peak',
+  base: { input: 1, inputCacheHit: 0.1, output: 3 },
+  schedules: [{ name: 'peak', multiplier: 2, windows: [{ start: '01:00', end: '04:00', days: [1, 2, 3, 4, 5] }] }],
+}]
 
 /** One `assistant/message` event, as the agent loop writes it. */
 function step(over: {
@@ -160,13 +157,10 @@ describe('sessionSpendProjection', () => {
   })
 
   it('prices per provider when the table distinguishes them', () => {
-    const perProvider = sessionSpendProjection({
+    const perProvider = sessionSpendProjection([
       ...TABLE,
-      entries: [
-        ...TABLE.entries,
-        { model: 'm', provider: 'q', per: 1_000_000, timezone: 'UTC', base: { input: 10, inputCacheHit: 10, output: 10 } },
-      ],
-    }, 'USD')
+      { model: 'm', provider: 'q', per: 1_000_000, timezone: 'UTC', base: { input: 10, inputCacheHit: 10, output: 10 } },
+    ], 'USD')
     const q = perProvider.apply(perProvider.init(), step({ usage: USAGE, provider: 'q' }))
     expect(q.total).toBeGreaterThan(4.1)
   })
@@ -180,18 +174,25 @@ describe('sessionSpendProjection', () => {
 })
 
 describe('priceTableVersion', () => {
-  it('is stable for one table and different for a changed rate', () => {
-    expect(priceTableVersion(TABLE)).toBe(priceTableVersion(TABLE))
-    const dearer: PriceTable = {
-      ...TABLE,
-      entries: [{ ...TABLE.entries[0]!, base: { input: 2, inputCacheHit: 0.1, output: 3 } }],
-    }
-    expect(priceTableVersion(dearer)).not.toBe(priceTableVersion(TABLE))
+  it('is stable for one list and different for a changed rate', () => {
+    expect(priceTableVersion(TABLE, 'USD')).toBe(priceTableVersion(TABLE, 'USD'))
+    const dearer: PriceEntry[] = [{ ...TABLE[0]!, base: { input: 2, inputCacheHit: 0.1, output: 3 } }]
+    expect(priceTableVersion(dearer, 'USD')).not.toBe(priceTableVersion(TABLE, 'USD'))
+  })
+
+  it('differs between two currencies, so a switch discards the folds priced in the other', () => {
+    expect(priceTableVersion(TABLE, 'CNY')).not.toBe(priceTableVersion(TABLE, 'USD'))
+    expect(priceTableVersion(pricesFor(DEFAULT_PRICES, 'CNY'), 'CNY'))
+      .not.toBe(priceTableVersion(pricesFor(DEFAULT_PRICES, 'USD'), 'USD'))
   })
 
   it('is a non-negative safe integer, as the registry requires', () => {
-    for (const table of [TABLE, DEFAULT_PRICES]) {
-      const version = priceTableVersion(table)
+    for (const [entries, currency] of [
+      [TABLE, 'USD'],
+      [pricesFor(DEFAULT_PRICES, 'CNY'), 'CNY'],
+      [pricesFor(DEFAULT_PRICES, 'USD'), 'USD'],
+    ] as const) {
+      const version = priceTableVersion(entries, currency)
       expect(Number.isSafeInteger(version)).toBe(true)
       expect(version).toBeGreaterThanOrEqual(0)
     }

@@ -5,7 +5,7 @@
  * two reads, no mutators — mounted here through `ctx.remote.$mount()`. This
  * plugin fetches nothing itself and knows no key, no endpoint, and no prompt.
  *
- * @module @haoran/dsh-balance/client
+ * @module @sumomok/dsh-balance/client
  */
 
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
@@ -26,7 +26,7 @@ import { insertStyles } from './styles.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
-    /** `@haoran/dsh-balance` copy. */
+    /** `@sumomok/dsh-balance` copy. */
     balance: BalanceKey
   }
 }
@@ -50,7 +50,7 @@ interface AccountBalanceRemote {
 /** Unwrap one RPC result, turning a transport failure into a throw the store contains. */
 function unwrap<T>(result: RemoteResult<T>, method: string): T {
   if (result.ok) return result.value
-  throw new Error(result.error?.message ?? `@haoran/dsh-balance: accountBalance/${method} failed`)
+  throw new Error(result.error?.message ?? `@sumomok/dsh-balance: accountBalance/${method} failed`)
 }
 
 /**
@@ -99,7 +99,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
     },
   }
   const store = createBalanceStore(api, (error) => {
-    console.error('@haoran/dsh-balance: read failed', error)
+    console.error('@sumomok/dsh-balance: read failed', error)
   })
 
   ctx.effect(() => insertStyles(), 'dsh-balance: styles')

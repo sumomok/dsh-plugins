@@ -6,14 +6,14 @@
  * nothing outside the event it is handed, and performs no I/O — the projection
  * registry replays it over a session's durable log and caches the result.
  *
- * @module @haoran/dsh-balance/session-spend
+ * @module @sumomok/dsh-balance/session-spend
  */
 
 import { z } from 'zod'
 import type { TokenUsage } from '@deepseek-ai/dsh-llm'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
-import { costOf, resolveRates, type PriceTable, type TokenCounts } from './prices.ts'
+import { costOf, resolveRates, type PriceEntry, type TokenCounts } from './prices.ts'
 import type { SessionSpend, SessionSpendModel } from './types.ts'
 
 /** The projection key this plugin owns. */
@@ -44,11 +44,11 @@ export interface SessionSpendState {
 
 declare module '@deepseek-ai/dsh-session-projection/types' {
   interface SessionProjectionStateMap {
-    /** `@haoran/dsh-balance` per-session spend fold state. */
+    /** `@sumomok/dsh-balance` per-session spend fold state. */
     balanceSessionSpend: SessionSpendState
   }
   interface SessionProjectionMap {
-    /** `@haoran/dsh-balance` per-session spend, priced from the deployment's table. */
+    /** `@sumomok/dsh-balance` per-session spend, priced from the deployment's table. */
     balanceSessionSpend: SessionSpend
   }
 }
@@ -117,20 +117,20 @@ export interface PricedStep {
 
 /**
  * Price one step.
- * @param table - the resolved price table.
+ * @param entries - the active currency's price list.
  * @param subject - the provider route and model the step ran on.
  * @param atMs - the step's logged time, in epoch milliseconds.
  * @param usage - the step's provider-reported accounting.
  * @returns the cost and tier, or an unpriced verdict.
  */
 export function priceStep(
-  table: PriceTable,
+  entries: readonly PriceEntry[],
   subject: { provider?: string; model: string },
   atMs: number,
   usage: TokenUsage,
 ): PricedStep {
   const counts = billingBuckets(usage)
-  const price = resolveRates(table, subject, atMs)
+  const price = resolveRates(entries, subject, atMs)
   if (price === null) return { cost: null, counts }
   return { cost: costOf(counts, price.rates, price.per), scheduleName: price.scheduleName, counts }
 }
@@ -141,23 +141,25 @@ function emptyModel(): SessionSpendModel {
 }
 
 /**
- * Build the projection unit for one price table.
+ * Build the projection unit for one currency's price list.
  *
- * `stateVersion` is derived from the table itself: a persisted fold was
- * computed at the rates that were configured then, so changing a rate must
- * discard it rather than continue adding to it. Editing the table in
- * `cordis.yml` therefore re-prices every session on next read.
- * @param table - the resolved price table.
- * @param currency - the table's currency, restated on the wire.
+ * `stateVersion` is derived from the list and its currency: a persisted fold
+ * was computed at the rates that were configured then, so changing a rate — or
+ * switching to another currency's list — must discard it rather than continue
+ * adding to it. Editing the table in `cordis.yml`, or an account whose
+ * currency turns out to be the other one, therefore re-prices every session on
+ * next read.
+ * @param entries - the active currency's price list.
+ * @param currency - that currency's ISO 4217 code, restated on the wire.
  * @returns the registrable projection definition.
  */
 export function sessionSpendProjection(
-  table: PriceTable,
+  entries: readonly PriceEntry[],
   currency: string,
 ): ClientVisibleProjection {
   return {
     key: SESSION_SPEND_KEY,
-    stateVersion: priceTableVersion(table),
+    stateVersion: priceTableVersion(entries, currency),
     stateSchema,
     init: () => ({ total: 0, byModel: {}, bySchedule: {}, unpricedTokens: 0, steps: 0 }),
     apply: (state, event: SessionEvent) => {
@@ -165,7 +167,7 @@ export function sessionSpendProjection(
       const { usage, message } = event.data
       if (usage === undefined) return state
       const { provider, model } = message.source
-      const priced = priceStep(table, { provider, model }, event.time, usage)
+      const priced = priceStep(entries, { provider, model }, event.time, usage)
       const steps = state.steps + 1
       if (priced.cost === null) {
         return { ...state, steps, unpricedTokens: state.unpricedTokens + totalTokens(priced.counts) }
@@ -198,13 +200,14 @@ export function sessionSpendProjection(
 }
 
 /**
- * A stable non-negative integer identifying one price table's contents, used
- * as the projection's cache-invalidation version.
- * @param table - the resolved price table.
- * @returns a 31-bit FNV-1a hash of its canonical JSON.
+ * A stable non-negative integer identifying one priced configuration, used as
+ * the projection's cache-invalidation version.
+ * @param entries - the active currency's price list.
+ * @param currency - that currency's ISO 4217 code.
+ * @returns a 31-bit FNV-1a hash of both.
  */
-export function priceTableVersion(table: PriceTable): number {
-  const text = JSON.stringify(table)
+export function priceTableVersion(entries: readonly PriceEntry[], currency: string): number {
+  const text = JSON.stringify([currency, entries])
   let hash = 0x811c9dc5
   for (let index = 0; index < text.length; index += 1) {
     hash ^= text.charCodeAt(index)

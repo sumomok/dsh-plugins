@@ -13,7 +13,7 @@
  * Keep this file free of imports other than `zod`: the loader imports it
  * directly by file path, outside the plugin's own module graph.
  *
- * @module @haoran/dsh-balance/typert
+ * @module @sumomok/dsh-balance/typert
  */
 
 import { z } from 'zod'
@@ -69,18 +69,18 @@ const spendSchema = z.object({
 
 const forceSchema = z.boolean()
 
-const balanceCodec = { mode: 'strict', typeSymbol: '@haoran/dsh-balance#BalanceView', schema: balanceSchema }
-const spendCodec = { mode: 'strict', typeSymbol: '@haoran/dsh-balance#SpendView', schema: spendSchema }
-const forceCodec = { mode: 'strict', typeSymbol: '@haoran/dsh-balance#BalanceForce', schema: forceSchema }
+const balanceCodec = { mode: 'strict', typeSymbol: '@sumomok/dsh-balance#BalanceView', schema: balanceSchema }
+const spendCodec = { mode: 'strict', typeSymbol: '@sumomok/dsh-balance#SpendView', schema: spendSchema }
+const forceCodec = { mode: 'strict', typeSymbol: '@sumomok/dsh-balance#BalanceForce', schema: forceSchema }
 
 /** The contribution `dsh-typert-loader` registers for this package. */
 export const TYPERT = {
-  package: '@haoran/dsh-balance',
+  package: '@sumomok/dsh-balance',
   face: 'host',
   schemas: [],
   invocations: [
     {
-      id: '@haoran/dsh-balance#accountBalance/get',
+      id: '@sumomok/dsh-balance#accountBalance/get',
       service: 'accountBalance',
       namespace: 'accountBalance',
       method: 'get',
@@ -93,7 +93,7 @@ export const TYPERT = {
       result: balanceCodec,
     },
     {
-      id: '@haoran/dsh-balance#accountBalance/spend',
+      id: '@sumomok/dsh-balance#accountBalance/spend',
       service: 'accountBalance',
       namespace: 'accountBalance',
       method: 'spend',

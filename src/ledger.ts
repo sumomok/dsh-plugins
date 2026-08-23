@@ -13,11 +13,14 @@
  * that root belongs to the `storage-json` backend, whose children are
  * `<unit>.json` files rather than per-plugin directories.
  *
- * Aggregates are kept per local day rather than per row: the day buckets are
- * bounded by the retention window, so memory does not grow with the number of
- * requests and startup never holds the whole file.
+ * Aggregates are kept per currency and per local day rather than per row: the
+ * day buckets are bounded by the retention window, so memory does not grow
+ * with the number of requests and startup never holds the whole file. Rows
+ * priced in one currency are never folded into another's total — a deployment
+ * that switches price lists sees its new currency start from zero rather than
+ * inheriting a number in the old one.
  *
- * @module @haoran/dsh-balance/ledger
+ * @module @sumomok/dsh-balance/ledger
  */
 
 import { createReadStream } from 'node:fs'
@@ -106,6 +109,16 @@ export function parseLedgerRow(value: unknown): LedgerRow | null {
   }
 }
 
+/** One currency's aggregates: per local day, plus the whole retained window. */
+interface CurrencyAggregate {
+  /** Totals by local day key. */
+  days: Map<string, SpendTotals>
+  /** Totals across every retained row in this currency. */
+  allTime: SpendTotals
+  /** Epoch milliseconds of the oldest retained row in this currency. */
+  oldest: number | null
+}
+
 /** An empty period. */
 function emptyTotals(): SpendTotals {
   return { cost: 0, bySchedule: {}, requests: 0, unpricedTokens: 0 }
@@ -188,8 +201,6 @@ export interface LedgerOptions {
   timezone: string
   /** Days of rows to keep; older rows are dropped at startup. */
   retentionDays: number
-  /** ISO 4217 code the totals are reported in. */
-  currency: string
   /** The price table's `asOf` date, restated on the wire. */
   pricesAsOf: string
   /** Display facts the deployment configured, restated on the wire. */
@@ -204,9 +215,7 @@ export interface LedgerOptions {
  */
 export class Ledger {
   private readonly options: LedgerOptions
-  private readonly days = new Map<string, SpendTotals>()
-  private allTime = emptyTotals()
-  private oldest: number | null = null
+  private readonly byCurrency = new Map<string, CurrencyAggregate>()
   /** Serializes appends so two concurrent requests cannot interleave a line. */
   private writes = Promise.resolve()
 
@@ -309,41 +318,58 @@ export class Ledger {
   }
 
   /**
-   * Current day, month, and all-time spend.
+   * Current day, month, and all-time spend in one currency.
+   * @param currency - the ISO 4217 code of the active price list; rows priced
+   * in any other currency are not counted.
    * @returns the view the footer popover renders.
    */
-  spend(): SpendView {
+  spend(currency: string): SpendView {
+    const aggregate = this.byCurrency.get(currency)
     const today = dayKey(this.options.now(), this.options.timezone)
     const month = today.slice(0, 7)
     const dayTotals = emptyTotals()
     const monthTotals = emptyTotals()
-    for (const [key, totals] of this.days) {
-      if (key === today) mergeTotals(dayTotals, totals)
-      if (key.startsWith(month)) mergeTotals(monthTotals, totals)
+    const allTime = emptyTotals()
+    if (aggregate !== undefined) {
+      for (const [key, totals] of aggregate.days) {
+        if (key === today) mergeTotals(dayTotals, totals)
+        if (key.startsWith(month)) mergeTotals(monthTotals, totals)
+      }
+      mergeTotals(allTime, aggregate.allTime)
     }
     return {
       today: dayTotals,
       month: monthTotals,
-      allTime: { ...this.allTime, bySchedule: { ...this.allTime.bySchedule } },
-      since: this.oldest,
-      currency: this.options.currency,
+      allTime,
+      since: aggregate?.oldest ?? null,
+      currency,
       pricesAsOf: this.options.pricesAsOf,
       timezone: this.options.timezone,
       ui: this.options.ui,
     }
   }
 
-  /** Fold one row into the day bucket and the all-time totals. */
+  /** ISO 4217 codes this ledger holds rows for. */
+  currencies(): readonly string[] {
+    return [...this.byCurrency.keys()].sort()
+  }
+
+  /** Fold one row into its currency's day bucket and all-time totals. */
   private fold(row: LedgerRow): void {
+    let aggregate = this.byCurrency.get(row.currency)
+    if (aggregate === undefined) {
+      aggregate = { days: new Map(), allTime: emptyTotals(), oldest: null }
+      this.byCurrency.set(row.currency, aggregate)
+    }
     const key = dayKey(row.t, this.options.timezone)
-    let bucket = this.days.get(key)
+    let bucket = aggregate.days.get(key)
     if (bucket === undefined) {
       bucket = emptyTotals()
-      this.days.set(key, bucket)
+      aggregate.days.set(key, bucket)
     }
     addRow(bucket, row)
-    addRow(this.allTime, row)
-    if (this.oldest === null || row.t < this.oldest) this.oldest = row.t
+    addRow(aggregate.allTime, row)
+    if (aggregate.oldest === null || row.t < aggregate.oldest) aggregate.oldest = row.t
   }
 
 }

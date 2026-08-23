@@ -9,6 +9,12 @@
  * rates or scales the base by a multiplier. Two tiers, five tiers, weekday and
  * weekend tiers, and a provider with no tiers at all are the same shape.
  *
+ * Rates are quoted per currency, one entry set each, because a provider that
+ * bills two currencies publishes two price lists rather than one list and an
+ * exchange rate — and a balance in one currency beside a spend total in
+ * another is a number nobody can act on. Which set is used is
+ * {@link selectPriceCurrency}'s decision.
+ *
  * @module @haoran/dsh-balance/prices
  */
 
@@ -98,14 +104,21 @@ export interface PriceEntry {
   schedules?: PriceSchedule[]
 }
 
-/** A complete price table. */
-export interface PriceTable {
-  /** Date the numbers were transcribed, `YYYY-MM-DD`; shown as "prices as of". */
-  asOf: string
-  /** ISO 4217 code the rates are quoted in. */
-  currency: string
-  /** One entry per priced model. */
+/** One currency's price list. */
+export interface CurrencyPrices {
+  /** One entry per priced model, in the currency this list is keyed by. */
   entries: PriceEntry[]
+}
+
+/** A complete price table: one price list per currency the provider bills in. */
+export interface PriceTable {
+  /** Date the numbers were transcribed, `YYYY-MM-DD`; shown beside the currency. */
+  asOf: string
+  /**
+   * Price lists by ISO 4217 code. A deployment may add any currency its
+   * provider bills in; nothing here is limited to the shipped two.
+   */
+  tables: Record<string, CurrencyPrices>
 }
 
 /** What {@link resolveRates} found for one request. */
@@ -286,19 +299,19 @@ export interface PriceSubject {
  * An entry naming a provider matches only that provider, and is preferred over
  * an entry for the same model that names none, so a deployment can price one
  * route apart without restating the others.
- * @param table - the resolved price table.
+ * @param entries - one currency's price list.
  * @param subject - the provider route and model of the request.
  * @param atMs - the request instant, in epoch milliseconds.
- * @returns the applicable rates, or `null` when the table prices no such model.
+ * @returns the applicable rates, or `null` when the list prices no such model.
  */
 export function resolveRates(
-  table: PriceTable,
+  entries: readonly PriceEntry[],
   subject: PriceSubject,
   atMs: number,
 ): ResolvedPrice | null {
   let fallback: PriceEntry | undefined
   let exact: PriceEntry | undefined
-  for (const entry of table.entries) {
+  for (const entry of entries) {
     if (entry.model !== subject.model) continue
     if (entry.provider === undefined) fallback ??= entry
     else if (entry.provider === subject.provider) exact ??= entry
@@ -340,21 +353,71 @@ export function costOf(usage: TokenCounts, rates: ResolvedRates, per: number): n
 }
 
 /**
+ * Choose which currency's price list to spend against.
+ *
+ * The account's own billing currency wins when the table prices it: a balance
+ * read in CNY beside a spend total in USD is two numbers nobody can compare.
+ * Before the first successful balance read — and for an account whose currency
+ * the table does not price — the deployment's stated preference decides, then
+ * `USD`, then the first list by name so the choice is never arbitrary.
+ * @param table - the resolved price table.
+ * @param options - the account currency when known, and the configured preference.
+ * @returns the chosen ISO 4217 code, or `undefined` for an empty table.
+ */
+export function selectPriceCurrency(
+  table: PriceTable,
+  options: { balanceCurrency?: string; preference?: readonly string[] } = {},
+): string | undefined {
+  const has = (code: string | undefined): code is string =>
+    code !== undefined && Object.hasOwn(table.tables, code)
+  if (has(options.balanceCurrency)) return options.balanceCurrency
+  for (const code of options.preference ?? []) {
+    if (has(code)) return code
+  }
+  if (has('USD')) return 'USD'
+  return Object.keys(table.tables).sort()[0]
+}
+
+/**
+ * The price list for one currency.
+ * @param table - the resolved price table.
+ * @param currency - an ISO 4217 code the table prices.
+ * @returns that currency's entries, empty when the table does not price it.
+ */
+export function pricesFor(table: PriceTable, currency: string): readonly PriceEntry[] {
+  return table.tables[currency]?.entries ?? []
+}
+
+/**
  * Validate a price table's cross-field rules and reject a table this module
  * cannot price with. The schema behind `cordis.yml` settles types and
  * defaults; these are the rules a per-field schema cannot state.
  * @param table - the schema-validated table.
  * @param subject - diagnostic prefix naming the config path.
  * @returns the same table, once every rule holds.
- * @throws {Error} naming the first entry, schedule, or window that is unusable.
+ * @throws {Error} naming the first list, entry, schedule, or window that is unusable.
  */
 export function resolvePriceTable(table: PriceTable, subject = 'dsh-balance: prices'): PriceTable {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(table.asOf)) {
     throw new Error(`${subject}.asOf must be a YYYY-MM-DD date, received ${JSON.stringify(table.asOf)}`)
   }
-  if (table.currency.length === 0) throw new Error(`${subject}.currency must not be empty`)
+  const currencies = Object.keys(table.tables)
+  if (currencies.length === 0) {
+    throw new Error(`${subject}.tables must price at least one currency`)
+  }
+  for (const currency of currencies) {
+    if (!/^[A-Z]{3}$/.test(currency)) {
+      throw new Error(`${subject}.tables key ${JSON.stringify(currency)} must be a three-letter ISO 4217 code`)
+    }
+    resolveCurrencyPrices(table.tables[currency]?.entries ?? [], `${subject}.tables.${currency}`)
+  }
+  return table
+}
+
+/** Validate one currency's price list. */
+function resolveCurrencyPrices(entries: readonly PriceEntry[], subject: string): void {
   const seen = new Set<string>()
-  for (const entry of table.entries) {
+  for (const entry of entries) {
     const where = `${subject} entry ${JSON.stringify(entry.provider === undefined ? entry.model : `${entry.provider}/${entry.model}`)}`
     if (entry.model.length === 0) throw new Error(`${subject} has an entry with an empty model id`)
     const key = `${entry.provider ?? ''} ${entry.model}`
@@ -391,7 +454,6 @@ export function resolvePriceTable(table: PriceTable, subject = 'dsh-balance: pri
       }
     }
   }
-  return table
 }
 
 /** Reject a rate set missing a required member, or carrying a negative or non-finite one. */

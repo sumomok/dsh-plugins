@@ -7,7 +7,7 @@
  * tab costs a round trip and no provider call, but a component per surface
  * asking on its own would still be noise nobody needs.
  *
- * @module @haoran/dsh-balance/client/store
+ * @module @sumomok/dsh-balance/client/store
  */
 
 import type { BalanceView, SpendView } from '../types.ts'

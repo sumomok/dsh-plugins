@@ -41,7 +41,7 @@ const nodeDeps = {
 
 export default defineConfig([
   {
-    name: '@haoran/dsh-balance',
+    name: '@sumomok/dsh-balance',
     entry: { index: 'lib/types/index.js' },
     outDir: 'lib',
     format: ['esm'],
@@ -53,7 +53,7 @@ export default defineConfig([
     deps: nodeDeps,
   },
   {
-    name: '@haoran/dsh-balance/typert',
+    name: '@sumomok/dsh-balance/typert',
     entry: { typert: 'lib/types/typert.js' },
     outDir: 'lib',
     format: ['esm'],
@@ -65,7 +65,7 @@ export default defineConfig([
     deps: nodeDeps,
   },
   {
-    name: '@haoran/dsh-balance/client',
+    name: '@sumomok/dsh-balance/client',
     entry: { client: 'lib/types/client/index.js' },
     outDir: 'lib',
     format: 'cjs',
@@ -86,7 +86,7 @@ export default defineConfig([
     },
     outputOptions: {
       entryFileNames: 'client.js',
-      banner: 'window.__ModuleLoader__.load({ id: "@haoran/dsh-balance", factory: (require) => {',
+      banner: 'window.__ModuleLoader__.load({ id: "@sumomok/dsh-balance", factory: (require) => {',
       footer: 'return module.exports; } });',
       intro: 'var module = { exports: {} }; var exports = module.exports;',
     },

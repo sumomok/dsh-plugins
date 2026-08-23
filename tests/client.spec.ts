@@ -204,6 +204,13 @@ describe('the dictionaries', () => {
     }
   })
 
+  it('name both the price currency and its date in the prices line', () => {
+    for (const dict of [zh, en]) {
+      expect(dict['spend.pricesAsOf']).toContain('{currency}')
+      expect(dict['spend.pricesAsOf']).toContain('{date}')
+    }
+  })
+
   it('leave no placeholder in a key rendered as a bare label', () => {
     // The popover renders these three as the label column and the amount as the
     // value column, so a `{amount}` here would reach the screen as literal text.

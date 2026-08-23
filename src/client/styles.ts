@@ -4,7 +4,7 @@
  * Every colour is a harness theme variable rather than a literal, so the chip
  * follows the light and dark schemes the shell already switches between.
  *
- * @module @haoran/dsh-balance/client/styles
+ * @module @sumomok/dsh-balance/client/styles
  */
 
 /** Attribute marking this plugin's style tag, so a remount does not duplicate it. */

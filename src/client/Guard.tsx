@@ -6,7 +6,7 @@
  * way out. Balance is an ambient readout: if it cannot render, the correct
  * outcome is that it is not there, not that the sidebar is not there.
  *
- * @module @haoran/dsh-balance/client/Guard
+ * @module @sumomok/dsh-balance/client/Guard
  */
 
 import { Component, type ErrorInfo, type ReactNode } from 'react'
@@ -42,7 +42,7 @@ export class Guard extends Component<GuardProps, GuardState> {
    */
   override componentDidCatch(error: unknown, info: ErrorInfo): void {
     this.props.onError?.(error)
-    console.error('@haoran/dsh-balance: render failed', error, info.componentStack)
+    console.error('@sumomok/dsh-balance: render failed', error, info.componentStack)
   }
 
   /**

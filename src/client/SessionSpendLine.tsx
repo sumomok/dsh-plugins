@@ -7,7 +7,7 @@
  * with no model call — or one on a model the price table does not price —
  * shows no line rather than a confident zero.
  *
- * @module @haoran/dsh-balance/client/SessionSpendLine
+ * @module @sumomok/dsh-balance/client/SessionSpendLine
  */
 
 import type { ReactNode } from 'react'

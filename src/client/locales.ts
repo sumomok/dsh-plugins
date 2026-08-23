@@ -1,7 +1,7 @@
 /**
  * Copy for the browser half, in the two locales the harness ships.
  *
- * @module @haoran/dsh-balance/client/locales
+ * @module @sumomok/dsh-balance/client/locales
  */
 
 /** Locale namespace this plugin owns. */
@@ -54,7 +54,7 @@ export const en: Record<BalanceKey, string> = {
   'spend.allTime': 'All time',
   'spend.since': 'Counting since {date}',
   'spend.sinceEmpty': 'Nothing recorded yet',
-  'spend.pricesAsOf': 'Prices as of {date}',
+  'spend.pricesAsOf': 'Prices: {currency} ({date})',
   'spend.unpriced': '{tokens} tok unpriced',
   'spend.session': '≈{amount} this session',
   'spend.requests': '{count} requests',
@@ -81,7 +81,7 @@ export const zh: Record<BalanceKey, string> = {
   'spend.allTime': '累计',
   'spend.since': '自 {date} 起统计',
   'spend.sinceEmpty': '尚无记录',
-  'spend.pricesAsOf': '价格数据日期 {date}',
+  'spend.pricesAsOf': '价格:{currency}({date})',
   'spend.unpriced': '{tokens} token 未计价',
   'spend.session': '本会话约 {amount}',
   'spend.requests': '{count} 次请求',

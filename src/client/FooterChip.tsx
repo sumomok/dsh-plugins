@@ -7,7 +7,7 @@
  * sidebar it had before installing this plugin, not a placeholder explaining
  * that a feature it did not ask for is not working.
  *
- * @module @haoran/dsh-balance/client/FooterChip
+ * @module @sumomok/dsh-balance/client/FooterChip
  */
 
 import { useState, type ReactNode } from 'react'
@@ -110,7 +110,7 @@ function Popover(
               ? t('spend.sinceEmpty')
               : fill(t('spend.since'), { date: formatDate(spend.since) })}
             {' · '}
-            {fill(t('spend.pricesAsOf'), { date: spend.pricesAsOf })}
+            {fill(t('spend.pricesAsOf'), { currency: spend.currency, date: spend.pricesAsOf })}
           </div>
         </>
       )}

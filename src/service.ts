@@ -11,7 +11,7 @@
  * `cordis.yml`, so a caller admitted to `/api` behind a reverse proxy can read
  * numbers and change nothing — and learns no key, no endpoint, and no prompt.
  *
- * @module @haoran/dsh-balance/service
+ * @module @sumomok/dsh-balance/service
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -20,7 +20,7 @@ import type { BalanceView, SpendView } from './types.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
-    /** Account balance and spend reads (provided by `@haoran/dsh-balance`). */
+    /** Account balance and spend reads (provided by `@sumomok/dsh-balance`). */
     accountBalance: AccountBalanceService
   }
 }

@@ -8,7 +8,7 @@
  * *answer*, so a browser tab per monitor does not multiply into a request per
  * monitor.
  *
- * @module @haoran/dsh-balance/balance
+ * @module @sumomok/dsh-balance/balance
  */
 
 import type { BalanceUnavailableReason, BalanceView } from './types.ts'

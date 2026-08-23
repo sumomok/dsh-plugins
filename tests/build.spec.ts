@@ -60,7 +60,7 @@ suite('the built artifacts', () => {
   it('wraps the browser half in the module-loader closure the shell calls', () => {
     const source = readFileSync(lib('client.js'), 'utf8')
     expect(source.startsWith('window.__ModuleLoader__.load(')).toBe(true)
-    expect(source).toContain('id: "@haoran/dsh-balance"')
+    expect(source).toContain('id: "@sumomok/dsh-balance"')
     expect(source).toContain('factory: (require)')
     expect(source).toContain('return module.exports;')
   })

@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_PRICES } from '../src/default-prices.ts'
 import {
-  costOf, isSupportedTimezone, isWallClockTime, resolvePriceTable, resolveRates, wallClockAt, windowContains,
+  costOf, isSupportedTimezone, isWallClockTime, pricesFor, resolvePriceTable, resolveRates,
+  selectPriceCurrency, wallClockAt, windowContains,
 } from '../src/prices.ts'
-import type { PriceTable, TokenCounts } from '../src/prices.ts'
+import type { PriceEntry, PriceTable, TokenCounts } from '../src/prices.ts'
 
 /** 2026-08-19 is a Wednesday; 2026-08-22 a Saturday. */
 const WEDNESDAY_0230_UTC = Date.UTC(2026, 7, 19, 2, 30)
@@ -67,20 +68,16 @@ describe('wallClockAt', () => {
 })
 
 describe('resolveRates', () => {
-  const table: PriceTable = {
-    asOf: '2026-08-23',
-    currency: 'USD',
-    entries: [{
-      model: 'm',
-      per: 1_000_000,
-      timezone: 'UTC',
-      base: { input: 1, inputCacheHit: 0.1, output: 3 },
-      schedules: [
-        { name: 'first', multiplier: 2, windows: [{ start: '01:00', end: '04:00', days: [1, 2, 3, 4, 5] }] },
-        { name: 'second', rates: { input: 9, inputCacheHit: 9, output: 9 }, windows: [{ start: '00:00', end: '23:59' }] },
-      ],
-    }],
-  }
+  const table: PriceEntry[] = [{
+    model: 'm',
+    per: 1_000_000,
+    timezone: 'UTC',
+    base: { input: 1, inputCacheHit: 0.1, output: 3 },
+    schedules: [
+      { name: 'first', multiplier: 2, windows: [{ start: '01:00', end: '04:00', days: [1, 2, 3, 4, 5] }] },
+      { name: 'second', rates: { input: 9, inputCacheHit: 9, output: 9 }, windows: [{ start: '00:00', end: '23:59' }] },
+    ],
+  }]
 
   it('takes the first schedule whose window contains the instant', () => {
     const hit = resolveRates(table, { model: 'm' }, WEDNESDAY_0230_UTC)
@@ -107,11 +104,9 @@ describe('resolveRates', () => {
   })
 
   it('uses the base tier and its name outside every window', () => {
-    const noSchedules: PriceTable = {
-      asOf: '2026-08-23',
-      currency: 'USD',
-      entries: [{ model: 'm', per: 1_000, timezone: 'UTC', baseName: 'flat', base: { input: 1, inputCacheHit: 1, output: 1 } }],
-    }
+    const noSchedules: PriceEntry[] = [
+      { model: 'm', per: 1_000, timezone: 'UTC', baseName: 'flat', base: { input: 1, inputCacheHit: 1, output: 1 } },
+    ]
     const hit = resolveRates(noSchedules, { model: 'm' }, WEDNESDAY_1200_UTC)
     expect(hit).toEqual({
       rates: { input: 1, inputCacheHit: 1, output: 1, cacheWrite: 1, reasoning: 1 },
@@ -122,23 +117,15 @@ describe('resolveRates', () => {
   })
 
   it('names the base tier "standard" when the entry does not', () => {
-    const bare: PriceTable = {
-      asOf: '2026-08-23',
-      currency: 'USD',
-      entries: [{ model: 'm', per: 1, timezone: 'UTC', base: { input: 0, inputCacheHit: 0, output: 0 } }],
-    }
+    const bare: PriceEntry[] = [{ model: 'm', per: 1, timezone: 'UTC', base: { input: 0, inputCacheHit: 0, output: 0 } }]
     expect(resolveRates(bare, { model: 'm' }, 0)?.scheduleName).toBe('standard')
   })
 
   it('prefers a provider-specific entry over the provider-less one for the same model', () => {
-    const both: PriceTable = {
-      asOf: '2026-08-23',
-      currency: 'USD',
-      entries: [
-        { model: 'm', per: 1, timezone: 'UTC', base: { input: 1, inputCacheHit: 1, output: 1 } },
-        { model: 'm', provider: 'p', per: 1, timezone: 'UTC', base: { input: 5, inputCacheHit: 5, output: 5 } },
-      ],
-    }
+    const both: PriceEntry[] = [
+      { model: 'm', per: 1, timezone: 'UTC', base: { input: 1, inputCacheHit: 1, output: 1 } },
+      { model: 'm', provider: 'p', per: 1, timezone: 'UTC', base: { input: 5, inputCacheHit: 5, output: 5 } },
+    ]
     expect(resolveRates(both, { model: 'm', provider: 'p' }, 0)?.rates.input).toBe(5)
     expect(resolveRates(both, { model: 'm', provider: 'other' }, 0)?.rates.input).toBe(1)
     expect(resolveRates(both, { model: 'm' }, 0)?.rates.input).toBe(1)
@@ -149,17 +136,13 @@ describe('resolveRates', () => {
   })
 
   it('prices a request in the zone the entry names, not the host zone', () => {
-    const shanghai: PriceTable = {
-      asOf: '2026-08-23',
-      currency: 'CNY',
-      entries: [{
-        model: 'm',
-        per: 1,
-        timezone: 'Asia/Shanghai',
-        base: { input: 1, inputCacheHit: 1, output: 1 },
-        schedules: [{ name: 'night', multiplier: 0.5, windows: [{ start: '00:30', end: '08:30' }] }],
-      }],
-    }
+    const shanghai: PriceEntry[] = [{
+      model: 'm',
+      per: 1,
+      timezone: 'Asia/Shanghai',
+      base: { input: 1, inputCacheHit: 1, output: 1 },
+      schedules: [{ name: 'night', multiplier: 0.5, windows: [{ start: '00:30', end: '08:30' }] }],
+    }]
     // 18:00 UTC is 02:00 the next day in Shanghai, inside the night window.
     expect(resolveRates(shanghai, { model: 'm' }, Date.UTC(2026, 7, 19, 18, 0))?.scheduleName).toBe('night')
     expect(resolveRates(shanghai, { model: 'm' }, Date.UTC(2026, 7, 19, 6, 0))?.scheduled).toBe(false)
@@ -181,15 +164,30 @@ describe('costOf', () => {
 
 describe('resolvePriceTable', () => {
   const entry = { model: 'm', per: 1, timezone: 'UTC', base: { input: 1, inputCacheHit: 1, output: 1 } }
-  const table = (over: Partial<PriceTable>): PriceTable =>
-    ({ asOf: '2026-08-23', currency: 'USD', entries: [entry], ...over })
-
-  it('accepts the shipped default', () => {
-    expect(resolvePriceTable(DEFAULT_PRICES)).toBe(DEFAULT_PRICES)
+  /** A one-currency table, so each case states only what it is testing. */
+  const table = (over: { asOf?: string; entries?: PriceEntry[]; tables?: PriceTable['tables'] } = {}): PriceTable => ({
+    asOf: over.asOf ?? '2026-08-23',
+    tables: over.tables ?? { USD: { entries: over.entries ?? [entry] } },
   })
 
   it('rejects an asOf that is not a date', () => {
     expect(() => resolvePriceTable(table({ asOf: 'August' }))).toThrow(/asOf/)
+  })
+
+  it('rejects a table pricing no currency at all', () => {
+    expect(() => resolvePriceTable(table({ tables: {} }))).toThrow(/at least one currency/)
+  })
+
+  it('rejects a key that is not an ISO 4217 code', () => {
+    expect(() => resolvePriceTable(table({ tables: { dollars: { entries: [entry] } } })))
+      .toThrow(/three-letter ISO 4217 code/)
+  })
+
+  it('names the offending currency list in the diagnostic', () => {
+    const broken = table({
+      tables: { USD: { entries: [entry] }, CNY: { entries: [{ ...entry, timezone: 'Mars/Olympus' }] } },
+    })
+    expect(() => resolvePriceTable(broken)).toThrow(/tables\.CNY/)
   })
 
   it('rejects a schedule declaring both rates and a multiplier', () => {
@@ -258,26 +256,104 @@ describe('resolvePriceTable', () => {
   })
 })
 
-describe('the shipped DeepSeek table', () => {
-  it('doubles the off-peak rate inside a published peak window', () => {
-    const offPeak = resolveRates(DEFAULT_PRICES, { model: 'deepseek-v4-pro', provider: 'deepseek-official' }, WEDNESDAY_1200_UTC)
-    const peak = resolveRates(DEFAULT_PRICES, { model: 'deepseek-v4-pro', provider: 'deepseek-official' }, WEDNESDAY_0230_UTC)
-    expect(offPeak?.rates.output).toBeCloseTo(1.98, 10)
-    expect(peak?.rates.output).toBeCloseTo(3.96, 10)
-    expect(peak?.scheduleName).toBe('peak')
-    expect(offPeak?.scheduleName).toBe('off-peak')
+describe('the shipped DeepSeek tables', () => {
+  const deepseek = (currency: string, model: string, atMs: number) =>
+    resolveRates(pricesFor(DEFAULT_PRICES, currency), { model, provider: 'deepseek-official' }, atMs)
+
+  it('prices both currencies DeepSeek bills in', () => {
+    expect(Object.keys(DEFAULT_PRICES.tables).sort()).toEqual(['CNY', 'USD'])
+    for (const list of Object.values(DEFAULT_PRICES.tables)) expect(list.entries).toHaveLength(3)
   })
 
-  it('charges the off-peak rate all weekend', () => {
-    const saturday = resolveRates(DEFAULT_PRICES, { model: 'deepseek-v4-flash', provider: 'deepseek-official' }, SATURDAY_0230_UTC)
-    expect(saturday?.scheduled).toBe(false)
-    expect(saturday?.rates.inputCacheHit).toBeCloseTo(0.007, 10)
+  it('carries the USD numbers the English page prints', () => {
+    const offPeak = deepseek('USD', 'deepseek-v4-pro', WEDNESDAY_1200_UTC)
+    expect(offPeak?.rates).toMatchObject({ input: 0.66, inputCacheHit: 0.022, output: 1.98 })
+    expect(offPeak?.scheduleName).toBe('off-peak')
+    expect(deepseek('USD', 'deepseek-v4-pro', WEDNESDAY_0230_UTC)?.rates.output).toBeCloseTo(3.96, 10)
+  })
+
+  it('carries the CNY numbers the Chinese page prints', () => {
+    const offPeak = deepseek('CNY', 'deepseek-v4-pro', WEDNESDAY_1200_UTC)
+    expect(offPeak?.rates).toMatchObject({ input: 4.5, inputCacheHit: 0.15, output: 13.5 })
+    expect(offPeak?.scheduleName).toBe('off-peak')
+    const peak = deepseek('CNY', 'deepseek-v4-pro', WEDNESDAY_0230_UTC)
+    expect(peak?.rates).toMatchObject({ input: 9, inputCacheHit: 0.3, output: 27 })
+    expect(peak?.scheduleName).toBe('peak')
+  })
+
+  it('claims the same instants in both currencies, each written in its own page\'s timezone', () => {
+    // 09:00 Beijing is 01:00 UTC; the two lists must agree on every boundary.
+    for (const atMs of [
+      Date.UTC(2026, 7, 19, 0, 59), Date.UTC(2026, 7, 19, 1, 0), Date.UTC(2026, 7, 19, 3, 59),
+      Date.UTC(2026, 7, 19, 4, 0), Date.UTC(2026, 7, 19, 5, 59), Date.UTC(2026, 7, 19, 6, 0),
+      Date.UTC(2026, 7, 19, 9, 59), Date.UTC(2026, 7, 19, 10, 0), SATURDAY_0230_UTC,
+    ]) {
+      const cny = deepseek('CNY', 'deepseek-v4-flash', atMs)
+      const usd = deepseek('USD', 'deepseek-v4-flash', atMs)
+      expect(cny?.scheduleName, new Date(atMs).toISOString()).toBe(usd?.scheduleName)
+    }
+  })
+
+  it('charges the off-peak rate all weekend, in both currencies', () => {
+    for (const currency of ['CNY', 'USD']) {
+      expect(deepseek(currency, 'deepseek-v4-flash', SATURDAY_0230_UTC)?.scheduled).toBe(false)
+    }
   })
 
   it('bills a cache write at the cache-miss input rate and a reasoning token at the output rate', () => {
-    const hit = resolveRates(DEFAULT_PRICES, { model: 'deepseek-v4-flash', provider: 'deepseek-official' }, WEDNESDAY_1200_UTC)
-    expect(hit?.rates.cacheWrite).toBe(hit?.rates.input)
-    expect(hit?.rates.reasoning).toBe(hit?.rates.output)
+    for (const currency of ['CNY', 'USD']) {
+      const hit = deepseek(currency, 'deepseek-v4-flash', WEDNESDAY_1200_UTC)
+      expect(hit?.rates.cacheWrite).toBe(hit?.rates.input)
+      expect(hit?.rates.reasoning).toBe(hit?.rates.output)
+    }
+  })
+
+  it('accepts its own validation', () => {
+    expect(resolvePriceTable(DEFAULT_PRICES)).toBe(DEFAULT_PRICES)
+  })
+})
+
+describe('selectPriceCurrency', () => {
+  const table: PriceTable = {
+    asOf: '2026-08-23',
+    tables: {
+      CNY: { entries: [] },
+      EUR: { entries: [] },
+      USD: { entries: [] },
+    },
+  }
+
+  it('follows the account currency, which is the only one comparable to the balance', () => {
+    expect(selectPriceCurrency(table, { balanceCurrency: 'CNY', preference: ['USD'] })).toBe('CNY')
+  })
+
+  it('falls back to the configured preference before the account currency is known', () => {
+    expect(selectPriceCurrency(table, { preference: ['EUR', 'USD'] })).toBe('EUR')
+  })
+
+  it('skips a preferred currency the table does not price', () => {
+    expect(selectPriceCurrency(table, { preference: ['JPY', 'CNY'] })).toBe('CNY')
+  })
+
+  it('ignores an account currency the table does not price', () => {
+    expect(selectPriceCurrency(table, { balanceCurrency: 'JPY', preference: ['CNY'] })).toBe('CNY')
+  })
+
+  it('falls back to USD, then to the first list by name, so the choice is never arbitrary', () => {
+    expect(selectPriceCurrency(table, {})).toBe('USD')
+    expect(selectPriceCurrency({ asOf: '2026-08-23', tables: { SEK: { entries: [] }, NOK: { entries: [] } } }, {}))
+      .toBe('NOK')
+  })
+
+  it('has nothing to choose from an empty table', () => {
+    expect(selectPriceCurrency({ asOf: '2026-08-23', tables: {} }, {})).toBeUndefined()
+  })
+})
+
+describe('pricesFor', () => {
+  it('returns a currency list, and an empty one for a currency the table does not price', () => {
+    expect(pricesFor(DEFAULT_PRICES, 'CNY')).toHaveLength(3)
+    expect(pricesFor(DEFAULT_PRICES, 'JPY')).toEqual([])
   })
 })
 

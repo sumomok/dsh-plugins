@@ -8,7 +8,7 @@
  * enforced by {@link resolveBalanceConfig}, which throws at load rather than
  * pricing something wrongly at the first request.
  *
- * @module @haoran/dsh-balance/config
+ * @module @sumomok/dsh-balance/config
  */
 
 import z from '@deepseek-ai/schemastery'
@@ -32,7 +32,11 @@ export interface Config {
   retryMs?: number
   /** Wall-clock budget for one balance request. */
   timeoutMs?: number
-  /** Currency codes in descending preference when the account holds several balances. */
+  /**
+   * Currency codes in descending preference. One list serves two decisions:
+   * which balance row to show when the account holds several, and which price
+   * list to spend against before the account's own currency is known.
+   */
   currency?: string[]
   /** Balance below which the chip is tinted as a warning. */
   lowBalance?: number
@@ -53,9 +57,10 @@ export interface Config {
   /** Which surfaces the browser half puts up. */
   surfaces?: Surfaces
   /**
-   * The price table spend is computed from. Replacing it re-prices every
-   * session; the shipped default carries DeepSeek's published rates and the
-   * date they were read.
+   * The price lists spend is computed from, one per currency the provider
+   * bills in. Replacing it re-prices every session; the shipped default
+   * carries DeepSeek's published CNY and USD rates and the date they were
+   * read. A deployment may add any currency its provider bills in.
    */
   prices?: PriceTable
 }
@@ -101,8 +106,7 @@ const entry = z.object({
 // annotation states that, so the default below and `Config.prices` line up.
 const prices = z.object({
   asOf: z.string().required(),
-  currency: z.string().required(),
-  entries: z.array(entry).default([]),
+  tables: z.dict(z.object({ entries: z.array(entry).default([]) })).default({}),
 }) as unknown as z<PriceTable>
 
 export const Config: z<Config> = z.object({
@@ -154,20 +158,22 @@ export interface ResolvedConfig {
 export function compactPriceTable(table: PriceTable): PriceTable {
   return {
     ...table,
-    entries: table.entries.map(entry => ({
-      ...entry,
-      schedules: (entry.schedules ?? []).map((schedule) => {
-        const { rates, ...rest } = schedule
-        return {
-          ...rest,
-          ...rates === undefined || Object.keys(rates).length === 0 ? {} : { rates },
-          windows: schedule.windows.map((window) => {
-            const { days, ...window_ } = window
-            return { ...window_, ...days === undefined || days.length === 0 ? {} : { days } }
-          }),
-        }
-      }),
-    })),
+    tables: Object.fromEntries(Object.entries(table.tables).map(([currency, list]) => [currency, {
+      entries: list.entries.map(entry => ({
+        ...entry,
+        schedules: (entry.schedules ?? []).map((schedule) => {
+          const { rates, ...rest } = schedule
+          return {
+            ...rest,
+            ...rates === undefined || Object.keys(rates).length === 0 ? {} : { rates },
+            windows: schedule.windows.map((window) => {
+              const { days, ...window_ } = window
+              return { ...window_, ...days === undefined || days.length === 0 ? {} : { days } }
+            }),
+          }
+        }),
+      })),
+    }])),
   }
 }
 

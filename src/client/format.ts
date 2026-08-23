@@ -1,7 +1,7 @@
 /**
  * Turning host numbers into the few strings the chip shows.
  *
- * @module @haoran/dsh-balance/client/format
+ * @module @sumomok/dsh-balance/client/format
  */
 
 import type { BalanceUiConfig, BalanceView } from '../types.ts'

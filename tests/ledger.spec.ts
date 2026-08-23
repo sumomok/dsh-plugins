@@ -55,7 +55,6 @@ function ledger(options: { now?: number; retentionDays?: number; timezone?: stri
     now: () => now,
     timezone: options.timezone ?? 'UTC',
     retentionDays: options.retentionDays ?? 400,
-    currency: 'USD',
     pricesAsOf: '2026-08-23',
     ui: UI,
   })
@@ -113,7 +112,7 @@ describe('Ledger', () => {
     await instance.append(row({ cost: 1 }))
     await instance.append(row({ seq: 2, t: NOW - DAY, cost: 2 }))
     await instance.append(row({ seq: 3, t: Date.UTC(2026, 6, 15, 12, 0), cost: 4 }))
-    const spend = instance.spend()
+    const spend = instance.spend('USD')
     expect(spend.today.cost).toBe(1)
     expect(spend.month.cost).toBe(3)
     expect(spend.allTime.cost).toBe(7)
@@ -127,22 +126,22 @@ describe('Ledger', () => {
     await shanghai.instance.open()
     await shanghai.instance.append(row({ t: lateUtc, cost: 1 }))
     // 23:30 UTC is already 2026-08-20 in Shanghai, and so is "now".
-    expect(shanghai.instance.spend().today.cost).toBe(1)
+    expect(shanghai.instance.spend('USD').today.cost).toBe(1)
 
     const utc = ledger({ now: lateUtc, timezone: 'UTC', file: join(root, 'utc.jsonl') })
     await utc.instance.open()
     await utc.instance.append(row({ t: lateUtc - 2 * 3_600_000, cost: 1 }))
-    expect(utc.instance.spend().today.cost).toBe(1)
+    expect(utc.instance.spend('USD').today.cost).toBe(1)
   })
 
   it('rolls today over when the clock crosses local midnight', async () => {
     const { instance, set } = ledger()
     await instance.open()
     await instance.append(row({ cost: 3 }))
-    expect(instance.spend().today.cost).toBe(3)
+    expect(instance.spend('USD').today.cost).toBe(3)
     set(NOW + DAY)
-    expect(instance.spend().today.cost).toBe(0)
-    expect(instance.spend().allTime.cost).toBe(3)
+    expect(instance.spend('USD').today.cost).toBe(0)
+    expect(instance.spend('USD').allTime.cost).toBe(3)
   })
 
   it('splits cost by the schedule that priced each row', async () => {
@@ -150,14 +149,14 @@ describe('Ledger', () => {
     await instance.open()
     await instance.append(row({ cost: 3, schedule: 'off-peak' }))
     await instance.append(row({ seq: 2, cost: 1, schedule: 'peak' }))
-    expect(instance.spend().allTime.bySchedule).toEqual({ 'off-peak': 3, peak: 1 })
+    expect(instance.spend('USD').allTime.bySchedule).toEqual({ 'off-peak': 3, peak: 1 })
   })
 
   it('counts an unpriced row as tokens rather than as zero cost', async () => {
     const { instance } = ledger()
     await instance.open()
     await instance.append(row({ unpriced: true, cost: 0, schedule: '' }))
-    const spend = instance.spend()
+    const spend = instance.spend('USD')
     expect(spend.allTime.cost).toBe(0)
     expect(spend.allTime.requests).toBe(1)
     expect(spend.allTime.unpricedTokens).toBe(170)
@@ -170,7 +169,7 @@ describe('Ledger', () => {
     await first.instance.append(row({ cost: 2 }))
     const second = ledger()
     expect(await second.instance.open()).toBe(1)
-    expect(second.instance.spend().allTime.cost).toBe(2)
+    expect(second.instance.spend('USD').allTime.cost).toBe(2)
   })
 
   it('drops rows past the retention window and rewrites the file', async () => {
@@ -180,7 +179,7 @@ describe('Ledger', () => {
     await first.instance.append(row({ seq: 2, t: NOW - 2 * DAY, cost: 2 }))
     const second = ledger({ retentionDays: 5 })
     expect(await second.instance.open()).toBe(1)
-    expect(second.instance.spend().allTime.cost).toBe(2)
+    expect(second.instance.spend('USD').allTime.cost).toBe(2)
     const lines = (await readFile(ledgerPath(root), 'utf8')).trim().split('\n')
     expect(lines).toHaveLength(1)
     expect(JSON.parse(lines[0]!)).toMatchObject({ seq: 2 })
@@ -203,15 +202,44 @@ describe('Ledger', () => {
     await writeFile(ledgerPath(root), `${await readFile(ledgerPath(root), 'utf8')}{"t":123,"sess`, { flag: 'w' })
     const second = ledger()
     expect(await second.instance.open()).toBe(1)
-    expect(second.instance.spend().allTime.cost).toBe(2)
+    expect(second.instance.spend('USD').allTime.cost).toBe(2)
     // The half-written line was dropped, so the rewrite kept only the good one.
     expect((await readFile(ledgerPath(root), 'utf8')).trim().split('\n')).toHaveLength(1)
   })
 
-  it('restates the currency, the price date, the zone, and the surface toggles', async () => {
+  it('keeps each currency\'s rows out of the other\'s totals', async () => {
     const { instance } = ledger()
     await instance.open()
-    const spend = instance.spend()
+    await instance.append(row({ cost: 3, currency: 'USD' }))
+    await instance.append(row({ seq: 2, cost: 20, currency: 'CNY' }))
+    expect(instance.spend('USD').allTime.cost).toBe(3)
+    expect(instance.spend('CNY').allTime.cost).toBe(20)
+    expect(instance.spend('USD').allTime.requests).toBe(1)
+    expect(instance.currencies()).toEqual(['CNY', 'USD'])
+  })
+
+  it('reports zeroes, not another currency\'s money, for a currency it holds no rows in', async () => {
+    const { instance } = ledger()
+    await instance.open()
+    await instance.append(row({ cost: 3, currency: 'USD' }))
+    const cny = instance.spend('CNY')
+    expect(cny).toMatchObject({ currency: 'CNY', since: null })
+    expect(cny.allTime).toEqual({ cost: 0, bySchedule: {}, requests: 0, unpricedTokens: 0 })
+  })
+
+  it('dates each currency from its own oldest row', async () => {
+    const { instance } = ledger()
+    await instance.open()
+    await instance.append(row({ t: NOW - 10 * DAY, currency: 'USD' }))
+    await instance.append(row({ seq: 2, t: NOW - 2 * DAY, currency: 'CNY' }))
+    expect(instance.spend('USD').since).toBe(NOW - 10 * DAY)
+    expect(instance.spend('CNY').since).toBe(NOW - 2 * DAY)
+  })
+
+  it('restates the price date, the zone, and the surface toggles', async () => {
+    const { instance } = ledger()
+    await instance.open()
+    const spend = instance.spend('USD')
     expect(spend.currency).toBe('USD')
     expect(spend.pricesAsOf).toBe('2026-08-23')
     expect(spend.timezone).toBe('UTC')

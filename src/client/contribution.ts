@@ -8,7 +8,7 @@
  * schema library: this file is bundled into the browser and a validator's
  * bytes would ride into every page load for two small reads.
  *
- * @module @haoran/dsh-balance/client/contribution
+ * @module @sumomok/dsh-balance/client/contribution
  */
 
 import type { TypertRemoteContribution } from '@deepseek-ai/dsh-typert-protocol'
@@ -21,7 +21,7 @@ interface Codec<T> {
 
 /** Reject a value the host should never have sent. */
 function fail(path: string, expected: string): never {
-  throw new Error(`@haoran/dsh-balance: host returned an unusable ${path} (expected ${expected})`)
+  throw new Error(`@sumomok/dsh-balance: host returned an unusable ${path} (expected ${expected})`)
 }
 
 function asRecord(value: unknown, path: string): Record<string, unknown> {
@@ -118,10 +118,10 @@ const forceCodec: Codec<boolean> = { parse: value => asBoolean(value, 'force') }
 
 /** The contribution `ctx.remote.$mount()` installs, mirroring `../typert.ts`. */
 export const CONTRIBUTION: TypertRemoteContribution = {
-  package: '@haoran/dsh-balance',
+  package: '@sumomok/dsh-balance',
   descriptors: [
     {
-      id: '@haoran/dsh-balance#accountBalance/get',
+      id: '@sumomok/dsh-balance#accountBalance/get',
       service: 'accountBalance',
       namespace: 'accountBalance',
       method: 'get',
@@ -131,20 +131,20 @@ export const CONTRIBUTION: TypertRemoteContribution = {
           name: 'force',
           wire: 'force',
           source: 'json' as const,
-          codec: { mode: 'strict' as const, typeSymbol: '@haoran/dsh-balance#BalanceForce', schema: forceCodec },
+          codec: { mode: 'strict' as const, typeSymbol: '@sumomok/dsh-balance#BalanceForce', schema: forceCodec },
           acceptsUndefined: true as const,
         },
       ],
-      result: { mode: 'strict' as const, typeSymbol: '@haoran/dsh-balance#BalanceView', schema: balanceCodec },
+      result: { mode: 'strict' as const, typeSymbol: '@sumomok/dsh-balance#BalanceView', schema: balanceCodec },
     },
     {
-      id: '@haoran/dsh-balance#accountBalance/spend',
+      id: '@sumomok/dsh-balance#accountBalance/spend',
       service: 'accountBalance',
       namespace: 'accountBalance',
       method: 'spend',
       invocation: { kind: 'direct' as const },
       parameters: [],
-      result: { mode: 'strict' as const, typeSymbol: '@haoran/dsh-balance#SpendView', schema: spendCodec },
+      result: { mode: 'strict' as const, typeSymbol: '@sumomok/dsh-balance#SpendView', schema: spendCodec },
     },
   ],
 }
