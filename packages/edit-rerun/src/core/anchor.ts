@@ -36,8 +36,8 @@ export type RerunRefusal =
    */
   | 'window-incomplete'
 
-/** The rerun target: the question to prefill and where the child session begins. */
-export interface RerunTarget {
+/** Everything the rerun flow consumes: where the child session is cut, and what it re-asks. */
+export interface EditAnchor {
   /**
    * Fork anchor: the `turn/end` seq of the last completed turn strictly before
    * the question. `sessions.fork({ atSeq })` cuts there, so the child's
@@ -48,6 +48,10 @@ export interface RerunTarget {
   forkAtSeq: number | null
   /** Verbatim text of the question, joined across its text blocks. */
   text: string
+}
+
+/** The rerun target: an {@link EditAnchor} plus which question produced it. */
+export interface RerunTarget extends EditAnchor {
   /** Seq of the question's own `user/message` event (diagnostics and tests). */
   questionSeq: number
   /** Turn the question opened. */
@@ -119,9 +123,27 @@ export function turnQuestion(
   afterSeq: number | null,
   endSeq: number,
 ): UserMessageNode | null {
+  const question = firstUserAfter(snapshot, afterSeq)
+  return question !== null && question.seq <= endSeq ? question : null
+}
+
+/**
+ * The first `user` node strictly after a boundary — the message that opened
+ * the turn following it.
+ *
+ * Steering messages admitted mid-turn are their own node kind and are never
+ * returned, so a turn opened by a question is identified by this scan alone.
+ * @param snapshot - the live conversation snapshot.
+ * @param afterSeq - exclusive lower bound (a completed turn's boundary, or null from the top of the window).
+ * @returns the first question after the boundary, or null when the window holds none.
+ */
+export function firstUserAfter(
+  snapshot: ConversationSnapshot,
+  afterSeq: number | null,
+): UserMessageNode | null {
   const lower = afterSeq ?? -1
   for (const node of snapshot.nodes) {
-    if (node.kind === 'user' && node.seq > lower && node.seq <= endSeq) return node
+    if (node.kind === 'user' && node.seq > lower) return node
   }
   return null
 }
@@ -150,4 +172,64 @@ export function resolveRerunTarget(snapshot: ConversationSnapshot, messageId: st
   const text = questionText(question.content)
   if (text === null) return { ok: false, refusal: 'non-text-question' }
   return { ok: true, target: { forkAtSeq, text, questionSeq: question.seq, turn } }
+}
+
+/** Why the user-message action stays hidden on a given bubble. */
+export type UserEditRefusal =
+  /** The session log is gone (host/session-removed). */
+  | 'session-removed'
+  /** No `user` node at this seq in the current window. */
+  | 'unknown-message'
+  /**
+   * The message did not open its turn: a steering message admitted mid-turn,
+   * or a queued question that arrived behind the opener. Re-asking it would
+   * have to reproduce the turn it landed in, which a fork boundary cannot
+   * express.
+   */
+  | 'not-turn-opening'
+  /** The question carries an image or attachment block, which a text prefill cannot reproduce. */
+  | 'non-text-question'
+  /**
+   * The question opened the earliest turn in the loaded window while older
+   * events exist. Forking would cut at the wrong place and the blank-session
+   * fallback would silently drop the history above, so the action refuses.
+   */
+  | 'window-incomplete'
+
+/** Either a usable anchor or the reason the action stays hidden. */
+export type UserEditResolution =
+  | { readonly ok: true; readonly anchor: EditAnchor }
+  | { readonly ok: false; readonly refusal: UserEditRefusal }
+
+/**
+ * Resolve the anchor for the user message the action is seated on.
+ *
+ * The seat renders on every user-side bubble, including admitted steering
+ * messages, so this is where the plugin narrows to the ones a rerun can
+ * actually reproduce: a question that opened its own turn.
+ * @param snapshot - the live conversation snapshot.
+ * @param seq - the `user/message` seq the slot owner addressed.
+ * @param text - the text the bubble rendered, which the child's composer receives verbatim.
+ * @returns the anchor, or the refusal that keeps the action hidden.
+ */
+export function resolveUserEditAnchor(
+  snapshot: ConversationSnapshot,
+  seq: number,
+  text: string,
+): UserEditResolution {
+  if (snapshot.removed) return { ok: false, refusal: 'session-removed' }
+  const question = snapshot.nodes.find(
+    (node): node is UserMessageNode => node.kind === 'user' && node.seq === seq,
+  )
+  if (question === undefined) return { ok: false, refusal: 'unknown-message' }
+  const forkAtSeq = lastBoundaryBefore(snapshot.turnEnds, seq)
+  // The opener of the turn this seq falls in. A steering or queued message
+  // resolves to an earlier seq, which is exactly the case being excluded.
+  if (firstUserAfter(snapshot, forkAtSeq)?.seq !== seq) {
+    return { ok: false, refusal: 'not-turn-opening' }
+  }
+  // An unloaded prefix would make the blank-session fallback drop real history.
+  if (forkAtSeq === null && snapshot.hasMore) return { ok: false, refusal: 'window-incomplete' }
+  if (questionText(question.content) === null) return { ok: false, refusal: 'non-text-question' }
+  return { ok: true, anchor: { forkAtSeq, text } }
 }

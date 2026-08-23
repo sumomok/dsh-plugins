@@ -1,9 +1,12 @@
 /**
  * Browser half of `@sumomok/dsh-edit-rerun`.
  *
- * Two registrations, both on published conversation seats:
+ * Three registrations, all on published conversation seats:
  * - `conversation.chat.assistant-actions` — the edit-and-rerun and
  *   rerun-as-is buttons on each completed turn's action row;
+ * - `conversation.chat.user-actions` — the 「修改」 button under the reader's
+ *   own question. Hosts before that seat existed never declare it, so this one
+ *   is registered lazily and simply never appears there;
  * - `conversation.input.dock` — the invisible applier that hands the parked
  *   question to the forked session's composer.
  *
@@ -15,7 +18,10 @@ import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 // Type-only: merges the conversation.* SlotMap keys and the input standard kit.
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+// Type-only: declares `conversation.chat.user-actions` until the host types carry it.
+import type {} from './host-slot.ts'
 import { createPrefillStore } from '../core/pending-prefill.ts'
+import { EditUserMessageAction } from './EditUserMessageAction.tsx'
 import { PrefillApplier } from './PrefillApplier.tsx'
 import { RerunActions } from './RerunActions.tsx'
 import { createStartRerun } from './rerun.ts'
@@ -55,6 +61,23 @@ export function apply(ctx: ClientContext): void {
     locale: NS,
     inject: () => ({ startRerun }),
   }, RerunActions))
+
+  // The user-message seat exists only on a host that declares it. `inject`
+  // runs its factory on declaration and never at all without one, so this
+  // registration is what keeps the plugin loadable on a host that has no such
+  // seat: registering into an undeclared slot throws.
+  const t = ctx.locale.bind(NS)
+  ctx.slots.inject('conversation.chat.user-actions', () => ctx.slots.register({
+    name: 'conversation.chat.user-actions',
+    id: 'edit-rerun.edit',
+    // Same rank as the sibling assistant entry: the host paints copy and the
+    // clock itself, and this list carries only contributed actions.
+    order: 100,
+    // Thunked so the entry's name follows a locale change (SlotLabel contract).
+    label: () => t('user.edit.label'),
+    locale: NS,
+    inject: () => ({ startRerun }),
+  }, EditUserMessageAction))
 
   ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
     name: 'conversation.input.dock',
