@@ -20,19 +20,29 @@ const CLAMP_LINES = 4
  */
 const useMeasureEffect = typeof document === 'undefined' ? useEffect : useLayoutEffect
 
-/** Right-aligned column matching `.userStack`'s width cap in the host's bubble CSS. */
+/**
+ * Right-aligned column that hugs its cards, capped at `.userStack`'s own
+ * width so a long quote wraps exactly where the bubble would. `fit-content`
+ * keeps a short quote from reading as a banner detached from the bubble under
+ * it; the 6px bottom margin is the whole gap to that bubble, because the
+ * fragment this renders in is `display: contents` and the chat column adds
+ * none of its own.
+ */
 const COLUMN: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
-  alignItems: 'flex-end',
   gap: '6px',
+  width: 'fit-content',
   maxWidth: 'min(525px, 82%)',
   marginLeft: 'auto',
   marginBottom: '6px',
 }
 
 const CARD: CSSProperties = {
-  width: '100%',
+  // Stretched rather than `width: 100%`: a percentage child of a
+  // `fit-content` column feeds its own percentage back into the column's
+  // intrinsic width. Stretching also keeps sibling cards the same width.
+  alignSelf: 'stretch',
   boxSizing: 'border-box',
   borderLeft: '2px solid var(--dsw-alias-label-caption, rgba(128, 128, 128, 0.6))',
   borderRadius: '8px',

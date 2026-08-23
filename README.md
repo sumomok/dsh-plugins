@@ -61,7 +61,7 @@ This is a **shadow**, not a patch. The keyed `conversation.chat.node` slot rende
 ```sh
 pnpm run build
 cd packages/quote-message && pnpm pack --pack-destination ../../dist
-dsh plugin --profile <name> add ../../dist/sumomok-dsh-quote-message-0.2.0.tgz
+dsh plugin --profile <name> add ../../dist/sumomok-dsh-quote-message-0.2.1.tgz
 ```
 
 Once published, `dsh plugin --profile <name> add @sumomok/dsh-quote-message` installs the same thing from npm.
