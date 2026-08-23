@@ -1,4 +1,4 @@
-# @haoran/dsh-edit-rerun
+# @sumomok/dsh-edit-rerun
 
 [English](README.md) | 中文
 
@@ -56,15 +56,15 @@
 ## 安装
 
 ```sh
-pnpm --filter @haoran/dsh-edit-rerun run build
+pnpm --filter @sumomok/dsh-edit-rerun run build
 cd packages/edit-rerun && pnpm pack --pack-destination ../../dist
-dsh plugin --profile <name> add ../../dist/haoran-dsh-edit-rerun-0.1.0.tgz
+dsh plugin --profile <name> add ../../dist/sumomok-dsh-edit-rerun-0.1.0.tgz
 ```
 
 发布之后也可以直接：
 
 ```sh
-dsh plugin --profile <name> add @haoran/dsh-edit-rerun
+dsh plugin --profile <name> add @sumomok/dsh-edit-rerun
 ```
 
 manifest 声明了 `dsh.bundle.patch`，安装会把这个包追加到 profile 的 `dsh.profile.bundles`，由它的 patch 层挂载插件；同时声明了 `dsh.client`，网页插件表据此把浏览器半边发给前端。profile 自己的 `cordis.patch.yml` 无需改动。
@@ -80,7 +80,7 @@ manifest 声明了 `dsh.bundle.patch`，安装会把这个包追加到 profile �
 ## 开发
 
 ```sh
-pnpm --filter @haoran/dsh-edit-rerun run build   # tsc 声明 + 两个 esbuild 产物
+pnpm --filter @sumomok/dsh-edit-rerun run build   # tsc 声明 + 两个 esbuild 产物
 pnpm exec vitest run packages/edit-rerun          # 锚点规则、预填存储、构建冒烟
 ```
 

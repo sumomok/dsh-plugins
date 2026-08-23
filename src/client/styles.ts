@@ -12,7 +12,7 @@ export const ACTION_CLASS = 'dsh-edit-rerun-action'
 /** `data-*` attribute marking a button that is busy and refuses clicks. */
 export const BUSY_ATTR = 'data-busy'
 
-const STYLE_TAG_ID = '@haoran/dsh-edit-rerun'
+const STYLE_TAG_ID = '@sumomok/dsh-edit-rerun'
 
 const CSS = `
 .${ACTION_CLASS} {

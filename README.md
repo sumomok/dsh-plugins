@@ -1,4 +1,4 @@
-# @haoran/dsh-edit-rerun
+# @sumomok/dsh-edit-rerun
 
 English | [中文](README.zh.md)
 
@@ -56,15 +56,15 @@ The plugin is a browser-side UI contribution and nothing else.
 ## Install
 
 ```sh
-pnpm --filter @haoran/dsh-edit-rerun run build
+pnpm --filter @sumomok/dsh-edit-rerun run build
 cd packages/edit-rerun && pnpm pack --pack-destination ../../dist
-dsh plugin --profile <name> add ../../dist/haoran-dsh-edit-rerun-0.1.0.tgz
+dsh plugin --profile <name> add ../../dist/sumomok-dsh-edit-rerun-0.1.0.tgz
 ```
 
 Or, once published:
 
 ```sh
-dsh plugin --profile <name> add @haoran/dsh-edit-rerun
+dsh plugin --profile <name> add @sumomok/dsh-edit-rerun
 ```
 
 The manifest declares `dsh.bundle.patch`, so the install appends the package to the profile's `dsh.profile.bundles` and its patch layer mounts the plugin; it declares `dsh.client`, so the web plugin table serves the browser half. Nothing needs to be added to the profile's own `cordis.patch.yml`.
@@ -80,7 +80,7 @@ The plugin renders into `conversation.chat.assistant-actions` and `conversation.
 ## Development
 
 ```sh
-pnpm --filter @haoran/dsh-edit-rerun run build   # tsc declarations + two esbuild bundles
+pnpm --filter @sumomok/dsh-edit-rerun run build   # tsc declarations + two esbuild bundles
 pnpm exec vitest run packages/edit-rerun          # anchor rules, prefill store, build smoke
 ```
 

@@ -1,5 +1,5 @@
 /**
- * Self-contained build for @haoran/dsh-edit-rerun.
+ * Self-contained build for @sumomok/dsh-edit-rerun.
  *
  * Three artifacts, all under `lib/`:
  * - `lib/types/**` — declarations, emitted by tsc (this project is
@@ -30,7 +30,7 @@ import { build } from 'esbuild'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const require = createRequire(import.meta.url)
-const pkgId = '@haoran/dsh-edit-rerun'
+const pkgId = '@sumomok/dsh-edit-rerun'
 
 /** Module specifiers the web shell seeds into its frozen module table. */
 const EXTERNALS = [

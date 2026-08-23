@@ -4,7 +4,7 @@
  * and the patch row are checked against each other rather than described in
  * prose only.
  *
- * Run `pnpm --filter @haoran/dsh-edit-rerun run build` first; these assertions
+ * Run `pnpm --filter @sumomok/dsh-edit-rerun run build` first; these assertions
  * read `lib/`.
  */
 import { existsSync, readFileSync } from 'node:fs'
@@ -52,7 +52,8 @@ describe('patch layer', () => {
   it('inserts the plugin under a stable id naming this package', () => {
     const patch = read('cordis.patch.yml')
     expect(patch).toMatch(/^\s+- id: edit-rerun$/m)
-    expect(patch).toMatch(/^\s+name: '@haoran\/dsh-edit-rerun'$/m)
+    // Read the name off the manifest so a rename cannot leave the row behind.
+    expect(patch).toContain(`name: '${manifest.name}'`)
   })
 })
 
@@ -85,7 +86,9 @@ describe('built artifacts', () => {
     // the way the browser executes it: as a classic script whose sole free
     // name is `window`.
     new Function('window', read('lib/client.js'))(shell)
-    expect(loaded.id).toBe('@haoran/dsh-edit-rerun')
+    // The build script spells the loader id independently of the manifest;
+    // the web plugin table keys the bundle by package name, so they must agree.
+    expect(loaded.id).toBe(manifest.name)
     const plugin = loaded.exports as { apply?: unknown; inject?: unknown }
     expect(typeof plugin.apply).toBe('function')
     expect(plugin.inject).toEqual(['slots', 'locale', 'sessions', 'workspaces'])
