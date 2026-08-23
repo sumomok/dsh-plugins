@@ -60,7 +60,7 @@ pnpm run typecheck
 pnpm run lint
 ```
 
-Build before test: `packages/edit-rerun`'s build smoke reads the artifacts under its `lib/`, so a bare `pnpm run test` on a never-built checkout fails there rather than skipping.
+`pnpm run test` works on a fresh clone: the build smokes for `quote-message` and `edit-rerun` run their own bundler first. `balance`'s build smoke skips when its `lib/` is absent, so run `pnpm run build` before `pnpm run test` to exercise every assertion.
 
 Each package owns its whole build, because each emits a browser bundle in the closure-factory form the web shell's module loader consumes, which no shared node-platform config can produce. `pnpm --filter @sumomok/dsh-<name> run build` builds one on its own.
 

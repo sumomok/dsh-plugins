@@ -60,7 +60,7 @@ pnpm run typecheck
 pnpm run lint
 ```
 
-先构建再测试：`packages/edit-rerun` 的构建冒烟测试读它 `lib/` 下的产物，所以在从未构建过的检出上直接 `pnpm run test` 会在那里失败，而不是跳过。
+`pnpm run test` 在全新检出上就能跑：`quote-message` 和 `edit-rerun` 的构建冒烟测试会先跑自己的打包器。`balance` 的构建冒烟测试在 `lib/` 不存在时跳过，因此想让每条断言都执行，就先 `pnpm run build` 再 `pnpm run test`。
 
 每个包都拥有自己的整套构建，因为每个都要产出 Web 外壳模块加载器所要求的闭包工厂形式的浏览器包，共享的 node 平台配置产不出这种东西。`pnpm --filter @sumomok/dsh-<name> run build` 可以单独构建其中一个。
 
