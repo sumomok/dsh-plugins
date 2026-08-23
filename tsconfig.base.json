@@ -1,0 +1,31 @@
+{
+  // Shared compiler face for every package in this workspace. It mirrors
+  // deepseek-harness/tsconfig.base.json so knowledge transfers between the two
+  // repos, minus the upstream `paths` block: packages here resolve
+  // `@deepseek-ai/*` from node_modules (published tarballs), not from a sibling
+  // source checkout, so no path aliases are needed.
+  // NEVER add include/files here — it would leak into every extending project.
+  "compilerOptions": {
+    "target": "es2024",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "declaration": true,
+    "sourceMap": true,
+    "declarationMap": true,
+    "composite": true,
+    "incremental": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "verbatimModuleSyntax": false,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "types": ["node"]
+  }
+}

@@ -1,0 +1,11 @@
+{
+  // Solution file: the whole-workspace graph for `tsc -b tsconfig.json`.
+  // `files: []` keeps it program-less; each package owns its own project.
+  "extends": "./tsconfig.base.json",
+  "files": [],
+  "references": [
+    { "path": "./packages/balance" },
+    { "path": "./packages/edit-rerun" },
+    { "path": "./packages/quote-message" }
+  ]
+}
