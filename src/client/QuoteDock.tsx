@@ -25,14 +25,18 @@ import type { QuoteKey } from './locales.ts'
 export interface QuoteDockProps {
   /** Owner share: the conversation snapshot backing the chat this pill points at. */
   readonly session: ConversationSnapshot
-  /** Owner share: the live input state; only its revision matters (the insert's CAS guard). */
-  readonly input: { readonly draftRev: number }
+  /** Owner share: the live input state; the draft names the insert position and the revision guards it. */
+  readonly input: { readonly draft: string; readonly draftRev: number }
   /** Framework prop: the session this entry is mounted for. */
   readonly sessionId: SessionId
   /** Framework prop: translate bound to this plugin's namespace. */
   readonly t: Translate<QuoteKey>
   /** Injected: seat one quote in this session's composer. */
-  readonly quote: (sessionId: SessionId, payload: QuotePayload, draftRev: number) => boolean
+  readonly quote: (
+    sessionId: SessionId,
+    payload: QuotePayload,
+    input: { readonly draft: string; readonly draftRev: number },
+  ) => boolean
 }
 
 /** A standing selection worth offering to quote. */
@@ -141,7 +145,7 @@ export function QuoteDock({ session, input, sessionId, t, quote }: QuoteDockProp
     if (pill === null) return
     const view = pill.nodeKey === undefined ? undefined : session.chat.nodes.get(pill.nodeKey)
     const identity = view === undefined ? undefined : quoteIdentityAt(session.nodes, view.anchorSeq)
-    quote(sessionId, buildQuotePayload({ text: pill.text, ...identity }), input.draftRev)
+    quote(sessionId, buildQuotePayload({ text: pill.text, ...identity }), input)
     // The selection is consumed: clearing it also keeps the pill from
     // reappearing when this click's own mouseup settles.
     window.getSelection()?.removeAllRanges()

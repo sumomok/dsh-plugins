@@ -11,7 +11,8 @@ import type { ReferenceInsert, TokenSpan } from '@deepseek-ai/dsh-client-ui-inpu
 // the cordis Events map.
 import type {} from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type { Translate } from '@deepseek-ai/dsh-client-ui-slots'
-import { encodeQuoteRef, quoteBlock, type QuotePayload } from '../core/quote.ts'
+import { quoteInsertRange } from '../core/draft.ts'
+import { encodeQuoteRef, type QuotePayload } from '../core/quote.ts'
 import type { QuoteKey } from './locales.ts'
 
 /**
@@ -40,36 +41,37 @@ export function chipLabel(payload: QuotePayload, t: Translate<QuoteKey>): string
  * quote is.
  * @param payload - the quote payload (the chip carries the text itself).
  * @param label - inline label from {@link chipLabel}.
+ * @param clipboardText - the block a copy of the draft carries.
  * @returns the insert the input machine seats as one occurrence.
  */
-export function quoteReference(payload: QuotePayload, label: string): ReferenceInsert {
+export function quoteReference(payload: QuotePayload, label: string, clipboardText: string): ReferenceInsert {
   return {
     source: QUOTE_SOURCE_NAME,
     ref: encodeQuoteRef(payload),
     label,
-    clipboardText: quoteBlock(payload),
+    clipboardText,
   }
 }
 
 /**
  * Seat one chip in a session's composer without going through the trigger
- * pipeline (the selection pill's path). The insert lands at draft offset 0:
- * the quote reads before the question it belongs to, and a zero-length span at
- * the start cannot glue the chip onto a word the user already typed.
+ * pipeline (the selection pill's path). The position comes from
+ * {@link quoteInsertRange}; `draftRev` rides along as the machine's CAS guard,
+ * so a draft that changed between the click and the dispatch is left alone.
  * @param ctx - the plugin's client root context.
  * @param sessionId - session whose composer receives the chip.
  * @param reference - the insert from {@link quoteReference}.
- * @param draftRev - draft revision read at click time (the machine's CAS guard).
+ * @param input - published input state read at click time.
  * @returns whether the input machine applied it (false = stale draft, or no live scope).
  */
 export function insertQuoteReference(
   ctx: ClientContext,
   sessionId: SessionId,
   reference: ReferenceInsert,
-  draftRev: number,
+  input: { readonly draft: string; readonly draftRev: number },
 ): boolean {
   const actx = ctx.sessions.scope(sessionId)
   if (actx === undefined) return false
-  const span: TokenSpan = { start: 0, end: 0, draftRev }
+  const span: TokenSpan = { ...quoteInsertRange(input), draftRev: input.draftRev }
   return actx.bail(actx, 'slash/input-insert-reference', { reference, span }) === true
 }

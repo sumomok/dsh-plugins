@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildQuotePayload, capQuoteText, decodeQuoteRef, encodeQuoteRef, QUOTE_TEXT_LIMIT,
-  quoteBlock, quoteHeader, serializeQuote,
+  quoteBlock, quoteHeader, serializeQuote, type QuoteHeaderWords,
 } from '../src/core/quote.ts'
+
+/** The two shipped vocabularies, as the client reads them off the locale service. */
+const ZH: QuoteHeaderWords = { quote: '引用', user: '用户消息', assistant: '助手消息' }
+const EN: QuoteHeaderWords = { quote: 'quote', user: 'user message', assistant: 'assistant message' }
 
 describe('capQuoteText', () => {
   it('keeps a text at or below the limit unchanged and reports no total', () => {
@@ -44,33 +48,46 @@ describe('buildQuotePayload', () => {
 
 describe('quoteHeader', () => {
   it('names role and seq', () => {
-    expect(quoteHeader({ text: '', seq: 12, role: 'assistant' })).toBe('[引用 #12 助手消息]')
-    expect(quoteHeader({ text: '', seq: 7, role: 'user' })).toBe('[引用 #7 用户消息]')
+    expect(quoteHeader({ text: '', seq: 12, role: 'assistant' }, ZH)).toBe('[引用 #12 助手消息]')
+    expect(quoteHeader({ text: '', seq: 7, role: 'user' }, ZH)).toBe('[引用 #7 用户消息]')
   })
 
   it('adds the message id when the host recorded one', () => {
-    expect(quoteHeader({ text: '', seq: 12, role: 'assistant', messageId: 'msg_9' }))
+    expect(quoteHeader({ text: '', seq: 12, role: 'assistant', messageId: 'msg_9' }, ZH))
       .toBe('[引用 #12 助手消息 msg_9]')
   })
 
+  it('follows the interface language it was given', () => {
+    expect(quoteHeader({ text: '', seq: 12, role: 'assistant', messageId: 'msg_9' }, EN))
+      .toBe('[quote #12 assistant message msg_9]')
+    expect(quoteHeader({ text: '', seq: 7, role: 'user' }, EN)).toBe('[quote #7 user message]')
+    expect(quoteHeader({ text: '' }, EN)).toBe('[quote]')
+  })
+
   it('degrades to a bare marker when the source is unknown', () => {
-    expect(quoteHeader({ text: '' })).toBe('[引用]')
+    expect(quoteHeader({ text: '' }, ZH)).toBe('[引用]')
   })
 
   it('names the position alone when a row carries a seq but no role', () => {
-    expect(quoteHeader({ text: '', seq: 34 })).toBe('[引用 #34]')
+    expect(quoteHeader({ text: '', seq: 34 }, ZH)).toBe('[引用 #34]')
   })
 })
 
 describe('quoteBlock', () => {
   it('prefixes every line, and keeps a bare marker on an empty line', () => {
-    expect(quoteBlock({ text: 'first\n\nsecond', seq: 3, role: 'user' })).toBe(
+    expect(quoteBlock({ text: 'first\n\nsecond', seq: 3, role: 'user' }, ZH)).toBe(
       '> [引用 #3 用户消息]\n> first\n>\n> second',
     )
   })
 
+  it('keeps the truncation note in English, a measurement rather than prose', () => {
+    expect(quoteBlock({ text: 'kept', seq: 3, role: 'user', totalChars: 9000 }, EN)).toBe(
+      '> [quote #3 user message]\n> kept\n> …(truncated, 9000 chars total)',
+    )
+  })
+
   it('appends the truncation note as its own quoted line', () => {
-    expect(quoteBlock({ text: 'kept', seq: 3, role: 'user', totalChars: 9000 })).toBe(
+    expect(quoteBlock({ text: 'kept', seq: 3, role: 'user', totalChars: 9000 }, ZH)).toBe(
       '> [引用 #3 用户消息]\n> kept\n> …(truncated, 9000 chars total)',
     )
   })
@@ -78,7 +95,7 @@ describe('quoteBlock', () => {
 
 describe('serializeQuote', () => {
   it('opens on its own line and closes the blockquote with a blank line', () => {
-    expect(serializeQuote({ text: 'body', seq: 1, role: 'user' }))
+    expect(serializeQuote({ text: 'body', seq: 1, role: 'user' }, ZH))
       .toBe('\n> [引用 #1 用户消息]\n> body\n\n')
   })
 })
@@ -91,7 +108,7 @@ describe('the reference payload', () => {
 
   it('serializes from the payload alone, with no lookup into plugin state', () => {
     const ref = encodeQuoteRef(buildQuotePayload({ text: 'carried', seq: 2, role: 'user' }))
-    expect(serializeQuote(decodeQuoteRef(ref))).toBe('\n> [引用 #2 用户消息]\n> carried\n\n')
+    expect(serializeQuote(decodeQuoteRef(ref), ZH)).toBe('\n> [引用 #2 用户消息]\n> carried\n\n')
   })
 
   it('refuses an unreadable reference instead of inventing a quote', () => {

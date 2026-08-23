@@ -31,8 +31,18 @@ export interface QuotePayload {
 /** Character cap for one quote. A longer message is capped and reports its full length. */
 export const QUOTE_TEXT_LIMIT = 4000
 
-/** Header words, fixed rather than localized: this text is what the model reads. */
-const ROLE_WORD: Readonly<Record<QuoteRole, string>> = { user: '用户消息', assistant: '助手消息' }
+/**
+ * The words the header is built from, supplied by the caller so the block the
+ * model reads follows the interface language the user is working in.
+ */
+export interface QuoteHeaderWords {
+  /** Marker word opening the header (`引用` / `quote`). */
+  readonly quote: string
+  /** Role word for a human message (`用户消息` / `user message`). */
+  readonly user: string
+  /** Role word for an assistant message (`助手消息` / `assistant message`). */
+  readonly assistant: string
+}
 
 /**
  * Cap one quoted excerpt at `limit` characters.
@@ -70,12 +80,13 @@ export function buildQuotePayload(input: {
 /**
  * The header line naming the source, e.g. `[引用 #12 助手消息 msg_7]`.
  * @param payload - the quote payload.
+ * @param words - localized header vocabulary.
  * @returns the bracketed header, without the blockquote marker.
  */
-export function quoteHeader(payload: QuotePayload): string {
-  const parts = ['引用']
+export function quoteHeader(payload: QuotePayload, words: QuoteHeaderWords): string {
+  const parts = [words.quote]
   if (payload.seq !== undefined) parts.push(`#${String(payload.seq)}`)
-  if (payload.role !== undefined) parts.push(ROLE_WORD[payload.role])
+  if (payload.role !== undefined) parts.push(words[payload.role])
   if (payload.messageId !== undefined) parts.push(payload.messageId)
   return `[${parts.join(' ')}]`
 }
@@ -84,11 +95,14 @@ export function quoteHeader(payload: QuotePayload): string {
  * The markdown blockquote one chip expands to, without surrounding blank
  * lines. Every line carries the `>` marker so the block survives as one
  * quotation; an empty line keeps the bare marker rather than a trailing space.
+ * The truncation note stays in English on purpose: it is a machine-readable
+ * measurement of the excerpt, not prose addressed to the reader.
  * @param payload - the quote payload.
+ * @param words - localized header vocabulary.
  * @returns the block, newline-separated, with no trailing newline.
  */
-export function quoteBlock(payload: QuotePayload): string {
-  const lines = [quoteHeader(payload), ...payload.text.split('\n')]
+export function quoteBlock(payload: QuotePayload, words: QuoteHeaderWords): string {
+  const lines = [quoteHeader(payload, words), ...payload.text.split('\n')]
   if (payload.totalChars !== undefined) {
     lines.push(`…(truncated, ${String(payload.totalChars)} chars total)`)
   }
@@ -102,10 +116,11 @@ export function quoteBlock(payload: QuotePayload): string {
  * The host trims the assembled prompt, so a chip at either end of the draft
  * contributes no stray blank lines.
  * @param payload - the quote payload.
+ * @param words - localized header vocabulary.
  * @returns the padded blockquote.
  */
-export function serializeQuote(payload: QuotePayload): string {
-  return `\n${quoteBlock(payload)}\n\n`
+export function serializeQuote(payload: QuotePayload, words: QuoteHeaderWords): string {
+  return `\n${quoteBlock(payload, words)}\n\n`
 }
 
 /**

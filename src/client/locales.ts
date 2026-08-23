@@ -1,10 +1,11 @@
 /**
  * Copy for the two surfaces this plugin owns: the selection pill and the
- * `@message` picker rows, plus the chip label cached on each occurrence.
+ * `@message` picker rows, the chip label cached on each occurrence, and the
+ * `header.*` vocabulary the blockquote the model reads is built from.
  *
- * The blockquote header the model reads is NOT here — it is fixed wording in
- * core/quote.ts, because the prompt must not change with the reader's UI
- * language.
+ * The header words are read at submit time rather than at insert time, so a
+ * chip inserted before a language switch still serializes in the language the
+ * user is working in when they send.
  *
  * @module @haoran/dsh-quote-message/client/locales
  */
@@ -22,6 +23,9 @@ export const zh = {
   'role.assistant': '助手',
   'chip.label': '引用 #{seq} {role}',
   'chip.labelUnknown': '引用',
+  'header.quote': '引用',
+  'header.user': '用户消息',
+  'header.assistant': '助手消息',
 }
 
 /** English copy. */
@@ -34,6 +38,9 @@ export const en: Record<QuoteKey, string> = {
   'role.assistant': 'assistant',
   'chip.label': 'Quote #{seq} {role}',
   'chip.labelUnknown': 'Quote',
+  'header.quote': 'quote',
+  'header.user': 'user message',
+  'header.assistant': 'assistant message',
 }
 
 /** Dictionary key domain. */
