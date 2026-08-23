@@ -207,15 +207,21 @@ export type UserEditResolution =
  * The seat renders on every user-side bubble, including admitted steering
  * messages, so this is where the plugin narrows to the ones a rerun can
  * actually reproduce: a question that opened its own turn.
+ *
+ * The prefill text is read from the snapshot node, never from the seat's own
+ * `text` owner prop. That prop is whatever the bubble was handed, and a
+ * renderer may shadow the host's user view and hand it a reduced message —
+ * `@sumomok/dsh-quote-message` strips the quote region out of the text it
+ * renders and draws it as a card instead. Re-asking that text would drop the
+ * quote the question was built on, so the logged message is the only honest
+ * source.
  * @param snapshot - the live conversation snapshot.
  * @param seq - the `user/message` seq the slot owner addressed.
- * @param text - the text the bubble rendered, which the child's composer receives verbatim.
  * @returns the anchor, or the refusal that keeps the action hidden.
  */
 export function resolveUserEditAnchor(
   snapshot: ConversationSnapshot,
   seq: number,
-  text: string,
 ): UserEditResolution {
   if (snapshot.removed) return { ok: false, refusal: 'session-removed' }
   const question = snapshot.nodes.find(
@@ -230,6 +236,7 @@ export function resolveUserEditAnchor(
   }
   // An unloaded prefix would make the blank-session fallback drop real history.
   if (forkAtSeq === null && snapshot.hasMore) return { ok: false, refusal: 'window-incomplete' }
-  if (questionText(question.content) === null) return { ok: false, refusal: 'non-text-question' }
-  return { ok: true, anchor: { forkAtSeq, text } }
+  const logged = questionText(question.content)
+  if (logged === null) return { ok: false, refusal: 'non-text-question' }
+  return { ok: true, anchor: { forkAtSeq, text: logged } }
 }

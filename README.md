@@ -20,7 +20,7 @@ Your own question carries the action, and so does the answer under it:
 | The turn's action row | **Edit the prompt and rerun** | The same, addressed from the answer rather than the question. |
 | The turn's action row | **Rerun this turn as is** | The same, and sends the question immediately. |
 
-The button under your question is the direct one: the message you want to change is the one you click. It appears only on a question that opened its own turn — a steering message sent while the model was already working, or a second question queued behind the first, is not a turn boundary, so it carries no button.
+The composer receives the question exactly as the session logged it, not as the bubble happened to render it — so a question that quoted an earlier message comes back with its `> ` quote lines intact, and re-sending it reproduces the same card. The button under your question is the direct one: the message you want to change is the one you click. It appears only on a question that opened its own turn — a steering message sent while the model was already working, or a second question queued behind the first, is not a turn boundary, so it carries no button.
 
 The original session is never modified. The child appears as an ordinary session, its title numbered `(1)`, `(2)`, …, and its header shows the lineage the host records for every fork.
 
