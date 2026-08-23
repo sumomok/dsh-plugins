@@ -13,6 +13,7 @@
  * throw.
  */
 import { execFileSync } from 'node:child_process'
+import { rmSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -38,6 +39,10 @@ const CLIENT_EXTERNALS = [
   '@deepseek-ai/dsh-client-ui-primitives',
   '@deepseek-ai/dsh-client-runtime/client',
 ]
+
+// `tsc -b` never deletes an output whose source is gone, and `files` ships
+// whatever lib/ holds: a renamed module would otherwise stay in the tarball.
+rmSync(resolve(root, 'lib'), { recursive: true, force: true })
 
 execFileSync(process.execPath, [require.resolve('typescript/bin/tsc'), '-b', resolve(root, 'tsconfig.json')], {
   stdio: 'inherit',

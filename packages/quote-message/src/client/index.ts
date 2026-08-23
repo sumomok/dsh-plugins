@@ -5,6 +5,10 @@
  * pill (`conversation.input.dock` entry, see QuoteDock.tsx). The `@` trigger
  * belongs to files, and this plugin contributes no rows to it.
  *
+ * Once sent, the quote is shown as a card above the bubble rather than as raw
+ * `>` lines inside it: this plugin shadows the host's own user-message
+ * renderer and delegates the bubble itself back to it (QuotedUserNodeView).
+ *
  * The chip carries the quoted text in its own `ref` payload — never a key
  * into module state, so a chip keeps working after this plugin re-registers.
  * Nothing is written to the session log: the quote reaches the model as part
@@ -26,6 +30,7 @@ import {
 } from '../core/quote.ts'
 import { en, NS, zh, type QuoteKey } from './locales.ts'
 import { QuoteDock } from './QuoteDock.tsx'
+import { createQuotedUserNodeView } from './QuotedUserNodeView.tsx'
 import { chipLabel, insertQuoteReference, QUOTE_SOURCE_NAME, quoteReference } from './reference.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -37,6 +42,12 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 
 /** Services required by this plugin. */
 export const inject = ['slots', 'locale', 'sessions', 'inputTriggers']
+
+/** The host node kinds whose bubble carries a user's own prompt. */
+type UserNodeKey = 'user' | 'steering'
+
+/** The dictionary namespace the incumbent user-bubble renderer declares. */
+const HOST_NS = 'conversation'
 
 /**
  * Register the selection pill and the codec that expands its chips.
@@ -92,4 +103,28 @@ export function apply(ctx: ClientContext): void {
     locale: NS,
     inject: () => ({ quote }),
   }, QuoteDock))
+
+  // Every header this plugin has ever emitted, so a card drops the line
+  // whichever language it was written in.
+  const headings = [zh['header.line'], en['header.line']]
+
+  // Shadow the host's user and steering renderers: a keyed cell renders its
+  // lowest live priority, and the host's entries stay registered at the
+  // default 0 so this view can delegate the bubble straight back to them.
+  // Built once, outside the inject callbacks: those re-run when the declaring
+  // owner remounts, and a fresh component identity each time would remount
+  // every bubble in the transcript.
+  const shadowFor = (key: UserNodeKey) => createQuotedUserNodeView({
+    slotKey: key,
+    entries: () => ctx.slots.entries('conversation.chat.node'),
+    hostTranslate: () => ctx.locale.bind(HOST_NS),
+    t: () => t,
+    headings: () => headings,
+  })
+  const userView = shadowFor('user')
+  const steeringView = shadowFor('steering')
+  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(
+    { name: 'conversation.chat.node', key: 'user', priority: -1, locale: NS }, userView))
+  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(
+    { name: 'conversation.chat.node', key: 'steering', priority: -1, locale: NS }, steeringView))
 }
