@@ -10,4 +10,4 @@
 # declaration and serves `lib/client.js` to the browser.
 - insert:
     - id: edit-rerun
-      name: '@haoran/dsh-edit-rerun'
+      name: '@sumomok/dsh-edit-rerun'

@@ -1,5 +1,5 @@
 /**
- * Browser half of `@haoran/dsh-edit-rerun`.
+ * Browser half of `@sumomok/dsh-edit-rerun`.
  *
  * Two registrations, both on published conversation seats:
  * - `conversation.chat.assistant-actions` — the edit-and-rerun and

@@ -1,5 +1,5 @@
 /**
- * Host half of `@haoran/dsh-edit-rerun`, loaded in the DSH host process.
+ * Host half of `@sumomok/dsh-edit-rerun`, loaded in the DSH host process.
  *
  * The plugin is browser-only. The row `cordis.patch.yml` inserts mounts this
  * no-op so the loader sees a real cordis plugin and the web plugin table finds
