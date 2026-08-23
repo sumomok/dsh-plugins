@@ -1,0 +1,8 @@
+# Bundle layer of @sumomok/dsh-quote-message. `dsh plugin add` appends the
+# package to the profile's `dsh.profile.bundles`, and this layer inserts the
+# plugin row. The host half is a no-op: the row exists so the loader sees a
+# real cordis plugin and the client-modules registry serves the browser half
+# declared in `dsh.client`.
+- insert:
+    - id: ui-quote-message
+      name: '@sumomok/dsh-quote-message'
