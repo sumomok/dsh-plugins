@@ -1,0 +1,65 @@
+/**
+ * Browser half of `@haoran/dsh-edit-rerun`.
+ *
+ * Two registrations, both on published conversation seats:
+ * - `conversation.chat.assistant-actions` — the edit-and-rerun and
+ *   rerun-as-is buttons on each completed turn's action row;
+ * - `conversation.input.dock` — the invisible applier that hands the parked
+ *   question to the forked session's composer.
+ *
+ * Nothing here writes a session event, calls a host route, reads the
+ * filesystem, or opens a network connection.
+ */
+import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+// Type-only: merges ctx.locale into Context.
+import type {} from '@deepseek-ai/dsh-client-locale/client'
+// Type-only: merges the conversation.* SlotMap keys and the input standard kit.
+import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import { createPrefillStore } from '../core/pending-prefill.ts'
+import { PrefillApplier } from './PrefillApplier.tsx'
+import { RerunActions } from './RerunActions.tsx'
+import { createStartRerun } from './rerun.ts'
+import { en, zh, type EditRerunKey } from './locales.ts'
+import { installStyles } from './styles.ts'
+
+/** Locale namespace this plugin owns. */
+const NS = 'edit-rerun'
+
+declare module '@deepseek-ai/dsh-client-ui-slots' {
+  interface LocaleNamespaceMap {
+    /** edit-and-rerun surface copy. */
+    'edit-rerun': EditRerunKey
+  }
+}
+
+/** Client services this plugin requires. */
+export const inject = ['slots', 'locale', 'sessions', 'workspaces']
+
+/**
+ * Mount the rerun surface.
+ * @param ctx - client root context.
+ */
+export function apply(ctx: ClientContext): void {
+  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'edit-rerun: dictionaries')
+  ctx.effect(installStyles, 'edit-rerun: styles')
+
+  const store = createPrefillStore()
+  const startRerun = createStartRerun(ctx.sessions, ctx.workspaces, store)
+
+  ctx.slots.inject('conversation.chat.assistant-actions', () => ctx.slots.register({
+    name: 'conversation.chat.assistant-actions',
+    id: 'edit-rerun',
+    // After the host's own per-message contributions; the row's copy and
+    // branch controls are painted by the owner, not by this list.
+    order: 100,
+    locale: NS,
+    inject: () => ({ startRerun }),
+  }, RerunActions))
+
+  ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
+    name: 'conversation.input.dock',
+    id: 'edit-rerun-prefill',
+    order: 1000,
+    inject: () => ({ store }),
+  }, PrefillApplier))
+}
