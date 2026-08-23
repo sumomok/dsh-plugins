@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types",
+    // Outside `lib`, which is what the tarball ships.
+    "tsBuildInfoFile": "tsconfig.tsbuildinfo",
+    "jsx": "react-jsx",
+    "lib": ["es2024", "dom", "dom.iterable"]
+  },
+  "include": [
+    "src"
+  ]
+}
