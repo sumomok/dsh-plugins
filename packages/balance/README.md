@@ -6,6 +6,10 @@ Account balance and spend for the DeepSeek Harness web GUI. A chip beside Settin
 
 The balance is the provider's own number. The spend is the harness's own logged token usage multiplied by a price table this deployment owns — nothing is scraped at runtime, and a model the table does not price is reported as unpriced tokens rather than as zero.
 
+![The sidebar balance chip, its breakdown popover, and the session spend line](https://raw.githubusercontent.com/sumomok/dsh-plugins/main/assets/balance.gif)
+
+The account balance is masked in the recording; the spend figures and the price-tier line are the real ones the plugin computed.
+
 ## What it shows, and where
 
 | Surface | Slot | Shows |

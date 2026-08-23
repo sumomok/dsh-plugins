@@ -18,7 +18,13 @@ Harness 把一切都当作插件，它的仓外扩展路径是一等公民：`$D
 
 **[`@sumomok/dsh-edit-rerun`](packages/edit-rerun)** 在每个已完成回合的操作行上加两个按钮：编辑开启该回合的那个问题并从那一点重新运行，或原样重跑。两者都会 fork 出一个子会话，其历史正好止于该回合之前，因此原会话不被修改，错的那一轮也不会留在模型的上下文里。完整文档：[English](packages/edit-rerun/README.md) · [中文](packages/edit-rerun/README.zh.md)。
 
+![编辑更早的一条提问，在 fork 出的子会话里重新运行](https://raw.githubusercontent.com/sumomok/dsh-plugins/main/assets/edit-rerun.gif)
+
 **[`@sumomok/dsh-balance`](packages/balance)** 在侧边栏底部的设置旁放一个 chip，显示服务商账户里还剩多少，悬停打开的浮层拆解余额，以及这套安装今天、本月和累计花了多少；输入框下方还有一行显示当前会话花了多少。余额是服务商自己给的数字；花费是 Harness 自己记录的 token 用量，乘以一张本部署自己拥有、可从 `cordis.yml` 改的价格表。完整文档：[English](packages/balance/README.md) · [中文](packages/balance/README.zh.md)。
+
+![侧边栏余额 chip、展开的浮层，以及会话消费行](https://raw.githubusercontent.com/sumomok/dsh-plugins/main/assets/balance.gif)
+
+录制中的账户余额已做遮挡；消费数字是真实值。
 
 ## 安装
 

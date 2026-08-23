@@ -4,6 +4,8 @@ English | [中文](README.zh.md)
 
 Pick an earlier question in the DeepSeek Harness web GUI, edit it, and run again from that point — without losing the conversation you already have.
 
+![Editing an earlier question and rerunning it in a forked child session](https://raw.githubusercontent.com/sumomok/dsh-plugins/main/assets/edit-rerun.gif)
+
 ## Why
 
 A conversation goes wrong at one question. The answer under it, and everything the model did after it, all follow from a prompt that was missing a constraint, named the wrong file, or asked for the wrong thing. The only repair the GUI offers is to ask again at the bottom, which leaves the wrong exchange in the model's context, or to start over, which throws away the part that was working.

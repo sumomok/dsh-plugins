@@ -6,6 +6,10 @@ DeepSeek Harness Web 界面的账户余额与消费统计。侧边栏底部「�
 
 余额是服务方自己给的数字。消费是把 harness 已经记录的 token 用量,乘以本部署自己拥有的价格表算出来的——运行时不抓取任何页面;价格表里没有的模型,记为「未计价 token」,而不是悄悄当成 0。
 
+![侧边栏余额图框、展开的浮层,以及会话消费行](https://raw.githubusercontent.com/sumomok/dsh-plugins/main/assets/balance.gif)
+
+录制中的账户余额已做遮挡;消费数字和价格档位那一行是插件真实算出来的值。
+
 ## 显示什么,显示在哪
 
 | 界面 | Slot | 内容 |

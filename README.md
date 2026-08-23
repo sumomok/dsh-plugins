@@ -18,7 +18,13 @@ The harness treats everything as a plugin, and its out-of-tree extension path is
 
 **[`@sumomok/dsh-edit-rerun`](packages/edit-rerun)** adds two buttons to every completed turn's action row: edit the question that opened the turn and run again from that point, or rerun it as is. Both fork a child session whose history ends immediately before that turn, so the original conversation is never modified and the wrong exchange never stays in the model's context. Full documentation: [English](packages/edit-rerun/README.md) · [中文](packages/edit-rerun/README.zh.md).
 
+![Editing an earlier question and rerunning it in a forked child session](https://raw.githubusercontent.com/sumomok/dsh-plugins/main/assets/edit-rerun.gif)
+
 **[`@sumomok/dsh-balance`](packages/balance)** puts a chip beside Settings at the sidebar foot showing what is left in the provider account, with a popover breaking down the balance and what this installation has spent today, this month, and in total, plus a line under the composer showing what the open conversation has cost. The balance is the provider's own number; the spend is the harness's own logged token usage priced against a table this deployment owns and can change from `cordis.yml`. Full documentation: [English](packages/balance/README.md) · [中文](packages/balance/README.zh.md).
+
+![The sidebar balance chip, its breakdown popover, and the session spend line](https://raw.githubusercontent.com/sumomok/dsh-plugins/main/assets/balance.gif)
+
+The account balance is masked in that recording; the spend figures are the real ones.
 
 ## Install
 
