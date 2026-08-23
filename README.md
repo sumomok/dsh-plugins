@@ -12,12 +12,15 @@ The harness [deliberately removed](https://github.com/deepseek-ai/deepseek-harne
 
 ## What it does
 
-Every completed turn's action row (beside copy and branch) gains two buttons:
+Your own question carries the action, and so does the answer under it:
 
-| Button | What happens |
-| --- | --- |
-| **Edit the prompt and rerun** | Creates a child session whose history ends immediately before the edited question's turn, opens it, and puts the original question in the composer for you to change and send. |
-| **Rerun this turn as is** | The same, and sends the question immediately. |
+| Where | Button | What happens |
+| --- | --- | --- |
+| Under your question | **Edit** | Creates a child session whose history ends immediately before this question's turn, opens it, and puts the question in the composer for you to change and send. |
+| The turn's action row | **Edit the prompt and rerun** | The same, addressed from the answer rather than the question. |
+| The turn's action row | **Rerun this turn as is** | The same, and sends the question immediately. |
+
+The button under your question is the direct one: the message you want to change is the one you click. It appears only on a question that opened its own turn — a steering message sent while the model was already working, or a second question queued behind the first, is not a turn boundary, so it carries no button.
 
 The original session is never modified. The child appears as an ordinary session, its title numbered `(1)`, `(2)`, …, and its header shows the lineage the host records for every fork.
 
@@ -75,7 +78,9 @@ Install the tarball or the published package, never a `link:` path — a linked 
 
 Built against the `@deepseek-ai/*` client packages at `0.1.1-rc.2`; the peer ranges accept any `0.1.x` host from `0.1.0-rc.1` up. Note that a caret range over a prerelease does not do this: `^0.1.0-rc.7` does **not** match `0.1.1-rc.2` under semver prerelease rules, which is why the ranges here are spelled out.
 
-The plugin renders into `conversation.chat.assistant-actions` and `conversation.input.dock`, both published slots of `@deepseek-ai/dsh-client-ui-conversation`. If a future host renames either, the plugin fails loudly at registration rather than rendering into the wrong place.
+The plugin renders into `conversation.chat.assistant-actions`, `conversation.chat.user-actions`, and `conversation.input.dock`, all published slots of `@deepseek-ai/dsh-client-ui-conversation`. If a future host renames one, the plugin fails loudly at registration rather than rendering into the wrong place.
+
+**On hosts without the user-message seat.** `conversation.chat.user-actions` is newer than this plugin's supported floor. The entry is registered through `ctx.slots.inject`, whose factory runs only once the host declares the key, so a host that never declares it loads the plugin normally and simply shows no button under your questions — the two action-row buttons behave exactly as before. Nothing is logged and nothing fails; the seat is the only thing missing.
 
 ## Development
 

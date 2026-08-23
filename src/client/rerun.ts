@@ -1,5 +1,5 @@
 /**
- * Runtime wiring for the rerun flow: turn a resolved {@link RerunTarget} into
+ * Runtime wiring for the rerun flow: turn a resolved {@link EditAnchor} into
  * an open child session with the question parked for its composer.
  *
  * Only official client services are used — `sessions.fork`, `sessions.open`,
@@ -13,14 +13,14 @@ import type {
   WorkspaceId,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import type { PrefillStore } from '../core/pending-prefill.ts'
-import type { RerunTarget } from '../core/anchor.ts'
+import type { EditAnchor } from '../core/anchor.ts'
 
 /** Starting a rerun: the target plus how the child should treat the question. */
 export interface StartRerunInput {
   /** The session the question was asked in; it is never modified. */
   sessionId: SessionId
   /** The resolved fork anchor and question text. */
-  target: RerunTarget
+  target: EditAnchor
   /** Send the question immediately instead of leaving it for the user to edit. */
   autoSubmit: boolean
 }

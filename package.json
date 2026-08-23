@@ -1,7 +1,7 @@
 {
   "name": "@sumomok/dsh-edit-rerun",
   "description": "Edit an earlier question and run again from that point in the DeepSeek Harness web GUI: forks a child session whose history ends before the edited turn and prefills the composer, leaving the original conversation untouched",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "license": "MIT",
   "repository": {

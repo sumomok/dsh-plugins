@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  lastBoundaryBefore, questionText, resolveRerunTarget, turnQuestion,
+  firstUserAfter, lastBoundaryBefore, questionText, resolveRerunTarget,
+  resolveUserEditAnchor, turnQuestion,
 } from '../src/core/anchor.ts'
 import { image, snapshot, text } from './fixtures/snapshot.ts'
 
@@ -199,5 +200,111 @@ describe('resolveRerunTarget', () => {
       ok: true,
       target: { forkAtSeq: 39, text: 'later', questionSeq: 41, turn: 9 },
     })
+  })
+})
+
+describe('firstUserAfter', () => {
+  it('takes the opener of the turn following a boundary, not a later question', () => {
+    expect(firstUserAfter(twoTurns, 3)?.seq).toBe(5)
+  })
+
+  it('scans from the top of the window when no turn has completed', () => {
+    expect(firstUserAfter(twoTurns, null)?.seq).toBe(1)
+  })
+
+  it('reports nothing when the window holds no question after the boundary', () => {
+    expect(firstUserAfter(twoTurns, 7)).toBeNull()
+  })
+})
+
+describe('resolveUserEditAnchor', () => {
+  it('anchors a later question at the previous turn boundary', () => {
+    expect(resolveUserEditAnchor(twoTurns, 5, 'second')).toEqual({
+      ok: true, anchor: { forkAtSeq: 3, text: 'second' },
+    })
+  })
+
+  it('anchors the session-opening question at null, the blank-session path', () => {
+    expect(resolveUserEditAnchor(twoTurns, 1, 'first')).toEqual({
+      ok: true, anchor: { forkAtSeq: null, text: 'first' },
+    })
+  })
+
+  it('carries the owner text verbatim, which is what the composer receives', () => {
+    expect(resolveUserEditAnchor(twoTurns, 5, 'edited by the reader')).toEqual({
+      ok: true, anchor: { forkAtSeq: 3, text: 'edited by the reader' },
+    })
+  })
+
+  it('offers itself on a question whose turn is still running', () => {
+    // Only the boundary BEFORE the question has to be durable; the turn this
+    // question opened may still be producing steps.
+    const running = snapshot({
+      nodes: [
+        { kind: 'user', seq: 1, content: [text('first')] },
+        { kind: 'assistant', seq: 2, turn: 0, messageId: 'a0' },
+        { kind: 'user', seq: 5, content: [text('second')] },
+      ],
+      turnEnds: [[0, 3]],
+    })
+    expect(resolveUserEditAnchor(running, 5, 'second')).toEqual({
+      ok: true, anchor: { forkAtSeq: 3, text: 'second' },
+    })
+  })
+
+  it('refuses a steering message admitted mid-turn', () => {
+    const steered = snapshot({
+      nodes: [
+        { kind: 'user', seq: 1, content: [text('first')] },
+        { kind: 'steering', seq: 2, content: [text('also do this')] },
+        { kind: 'assistant', seq: 3, turn: 0, messageId: 'a0' },
+      ],
+      turnEnds: [[0, 4]],
+    })
+    expect(steered.nodes.some(node => node.kind === 'steering')).toBe(true)
+    expect(resolveUserEditAnchor(steered, 2, 'also do this'))
+      .toEqual({ ok: false, refusal: 'unknown-message' })
+  })
+
+  it('refuses a second question that arrived behind its turn opener', () => {
+    const queued = snapshot({
+      nodes: [
+        { kind: 'user', seq: 1, content: [text('first')] },
+        { kind: 'user', seq: 2, content: [text('and this too')] },
+        { kind: 'assistant', seq: 3, turn: 0, messageId: 'a0' },
+      ],
+      turnEnds: [[0, 4]],
+    })
+    expect(resolveUserEditAnchor(queued, 2, 'and this too'))
+      .toEqual({ ok: false, refusal: 'not-turn-opening' })
+  })
+
+  it('refuses a seq the current window does not carry', () => {
+    expect(resolveUserEditAnchor(twoTurns, 99, 'gone'))
+      .toEqual({ ok: false, refusal: 'unknown-message' })
+  })
+
+  it('refuses a removed session', () => {
+    const removed = snapshot({ nodes: [{ kind: 'user', seq: 1, content: [text('x')] }], turnEnds: [], removed: true })
+    expect(resolveUserEditAnchor(removed, 1, 'x')).toEqual({ ok: false, refusal: 'session-removed' })
+  })
+
+  it('refuses a question carrying an image, which a text draft cannot reproduce', () => {
+    const withImage = snapshot({
+      nodes: [{ kind: 'user', seq: 1, content: [text('look'), image()] }],
+      turnEnds: [],
+    })
+    expect(resolveUserEditAnchor(withImage, 1, 'look'))
+      .toEqual({ ok: false, refusal: 'non-text-question' })
+  })
+
+  it('refuses the earliest loaded question while older events exist', () => {
+    const partial = snapshot({
+      nodes: [{ kind: 'user', seq: 5, content: [text('mid conversation')] }],
+      turnEnds: [],
+      hasMore: true,
+    })
+    expect(resolveUserEditAnchor(partial, 5, 'mid conversation'))
+      .toEqual({ ok: false, refusal: 'window-incomplete' })
   })
 })
