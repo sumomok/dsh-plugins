@@ -219,20 +219,29 @@ describe('firstUserAfter', () => {
 
 describe('resolveUserEditAnchor', () => {
   it('anchors a later question at the previous turn boundary', () => {
-    expect(resolveUserEditAnchor(twoTurns, 5, 'second')).toEqual({
+    expect(resolveUserEditAnchor(twoTurns, 5)).toEqual({
       ok: true, anchor: { forkAtSeq: 3, text: 'second' },
     })
   })
 
   it('anchors the session-opening question at null, the blank-session path', () => {
-    expect(resolveUserEditAnchor(twoTurns, 1, 'first')).toEqual({
+    expect(resolveUserEditAnchor(twoTurns, 1)).toEqual({
       ok: true, anchor: { forkAtSeq: null, text: 'first' },
     })
   })
 
-  it('carries the owner text verbatim, which is what the composer receives', () => {
-    expect(resolveUserEditAnchor(twoTurns, 5, 'edited by the reader')).toEqual({
-      ok: true, anchor: { forkAtSeq: 3, text: 'edited by the reader' },
+  it('re-asks the logged message, not the text a shadowing bubble rendered', () => {
+    // The seat's `text` owner prop is whatever the bubble was handed.
+    // `@sumomok/dsh-quote-message` shadows the user view and hands it a message
+    // with the quote region stripped out (it draws the quote as a card), so a
+    // prefill built from that prop would drop the quote the question was
+    // asked against. The composer gets the whole logged message instead.
+    const quoted = snapshot({
+      nodes: [{ kind: 'user', seq: 1, content: [text('> 引用：\n> q\n\nask')] }],
+      turnEnds: [],
+    })
+    expect(resolveUserEditAnchor(quoted, 1)).toEqual({
+      ok: true, anchor: { forkAtSeq: null, text: '> 引用：\n> q\n\nask' },
     })
   })
 
@@ -247,7 +256,7 @@ describe('resolveUserEditAnchor', () => {
       ],
       turnEnds: [[0, 3]],
     })
-    expect(resolveUserEditAnchor(running, 5, 'second')).toEqual({
+    expect(resolveUserEditAnchor(running, 5)).toEqual({
       ok: true, anchor: { forkAtSeq: 3, text: 'second' },
     })
   })
@@ -262,7 +271,7 @@ describe('resolveUserEditAnchor', () => {
       turnEnds: [[0, 4]],
     })
     expect(steered.nodes.some(node => node.kind === 'steering')).toBe(true)
-    expect(resolveUserEditAnchor(steered, 2, 'also do this'))
+    expect(resolveUserEditAnchor(steered, 2))
       .toEqual({ ok: false, refusal: 'unknown-message' })
   })
 
@@ -275,18 +284,18 @@ describe('resolveUserEditAnchor', () => {
       ],
       turnEnds: [[0, 4]],
     })
-    expect(resolveUserEditAnchor(queued, 2, 'and this too'))
+    expect(resolveUserEditAnchor(queued, 2))
       .toEqual({ ok: false, refusal: 'not-turn-opening' })
   })
 
   it('refuses a seq the current window does not carry', () => {
-    expect(resolveUserEditAnchor(twoTurns, 99, 'gone'))
+    expect(resolveUserEditAnchor(twoTurns, 99))
       .toEqual({ ok: false, refusal: 'unknown-message' })
   })
 
   it('refuses a removed session', () => {
     const removed = snapshot({ nodes: [{ kind: 'user', seq: 1, content: [text('x')] }], turnEnds: [], removed: true })
-    expect(resolveUserEditAnchor(removed, 1, 'x')).toEqual({ ok: false, refusal: 'session-removed' })
+    expect(resolveUserEditAnchor(removed, 1)).toEqual({ ok: false, refusal: 'session-removed' })
   })
 
   it('refuses a question carrying an image, which a text draft cannot reproduce', () => {
@@ -294,7 +303,7 @@ describe('resolveUserEditAnchor', () => {
       nodes: [{ kind: 'user', seq: 1, content: [text('look'), image()] }],
       turnEnds: [],
     })
-    expect(resolveUserEditAnchor(withImage, 1, 'look'))
+    expect(resolveUserEditAnchor(withImage, 1))
       .toEqual({ ok: false, refusal: 'non-text-question' })
   })
 
@@ -304,7 +313,7 @@ describe('resolveUserEditAnchor', () => {
       turnEnds: [],
       hasMore: true,
     })
-    expect(resolveUserEditAnchor(partial, 5, 'mid conversation'))
+    expect(resolveUserEditAnchor(partial, 5))
       .toEqual({ ok: false, refusal: 'window-incomplete' })
   })
 })

@@ -2,11 +2,11 @@
  * The 「修改」 action, contributed to one user message's IconActions row
  * (`conversation.chat.user-actions`).
  *
- * The slot owner addresses the message by its log position and hands over the
- * text the bubble rendered; where the fork must cut is derived from the
- * session snapshot by {@link resolveUserEditAnchor}. The component renders
- * nothing on a bubble that did not open its own turn — an admitted steering
- * message, a queued question — so mid-turn chatter costs no chrome.
+ * The slot owner addresses the message by its log position; both the fork cut
+ * and the question to re-ask are derived from the session snapshot by
+ * {@link resolveUserEditAnchor}. The component renders nothing on a bubble
+ * that did not open its own turn — an admitted steering message, a queued
+ * question — so mid-turn chatter costs no chrome.
  */
 import { useCallback, useState } from 'react'
 import { IconEditOutline16, Toast, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -33,14 +33,17 @@ export type EditUserMessageActionProps =
  * @returns the icon button, or null when this message cannot be re-asked.
  */
 export function EditUserMessageAction(props: EditUserMessageActionProps) {
-  const { seq, text, sessionId, useSession, t, startRerun } = props
+  // The seat also carries `text`, but that is the text the bubble was handed,
+  // which a shadowing renderer may have reduced; the resolver reads the logged
+  // message instead.
+  const { seq, sessionId, useSession, t, startRerun } = props
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // The resolver returns a fresh object on every snapshot publication, so the
   // comparator is spelled over the fields that change what a click does.
   const anchor = useSession(
     snapshot => {
-      const resolution = resolveUserEditAnchor(snapshot, seq, text)
+      const resolution = resolveUserEditAnchor(snapshot, seq)
       return resolution.ok ? resolution.anchor : null
     },
     (a, b) => a?.forkAtSeq === b?.forkAtSeq && a?.text === b?.text,
