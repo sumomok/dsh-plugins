@@ -10,11 +10,11 @@ The harness treats everything as a plugin, and its out-of-tree extension path is
 
 | Package | npm | What it does |
 | --- | --- | --- |
-| [`packages/quote-message`](packages/quote-message) | `@sumomok/dsh-quote-message` | Quote earlier content of the current session into the composer as a native reference chip. |
+| [`packages/quote-message`](packages/quote-message) | `@sumomok/dsh-quote-message` | Quote earlier content of the current session into the composer as a native reference chip, rendered back as a quote card above the sent message. |
 | [`packages/edit-rerun`](packages/edit-rerun) | `@sumomok/dsh-edit-rerun` | Edit an earlier question and run again from that point, in a forked child session. |
 | [`packages/balance`](packages/balance) | `@sumomok/dsh-balance` | Show the DeepSeek account balance and what this installation has spent. |
 
-**[`@sumomok/dsh-quote-message`](packages/quote-message)** lets you cite earlier content of the current session while you compose: select a passage in any chat message, or pick a whole message with `@message`, and a native reference chip carries that text into your prompt, expanding at submit time into one markdown blockquote that names its source by position and role. It is client-only — the host half is a no-op that exists so the loader sees a real cordis plugin. Full documentation: [English](packages/quote-message/README.md) · [中文](packages/quote-message/README.zh.md).
+**[`@sumomok/dsh-quote-message`](packages/quote-message)** lets you cite earlier content of the current session while you compose: select a passage in any chat message and a native reference chip carries that text into your prompt, expanding at submit time into one markdown blockquote. Once sent, the quote is shown as its own card above your message rather than as a run of `>` lines inside it — the plugin shadows the host's user-bubble renderer and hands the bubble itself back to it. It is client-only — the host half is a no-op that exists so the loader sees a real cordis plugin. Full documentation: [English](packages/quote-message/README.md) · [中文](packages/quote-message/README.zh.md).
 
 **[`@sumomok/dsh-edit-rerun`](packages/edit-rerun)** adds two buttons to every completed turn's action row: edit the question that opened the turn and run again from that point, or rerun it as is. Both fork a child session whose history ends immediately before that turn, so the original conversation is never modified and the wrong exchange never stays in the model's context. Full documentation: [English](packages/edit-rerun/README.md) · [中文](packages/edit-rerun/README.zh.md).
 
