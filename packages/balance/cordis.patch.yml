@@ -1,0 +1,119 @@
+# The @sumomok/dsh-balance bundle patch. Adding this package to a profile
+# (`dsh plugin --profile <name> add <path-or-tarball>`) activates this layer via
+# the dsh.bundle manifest, mounting the balance chip and the spend ledger over
+# the running composition.
+#
+# Every field below is the plugin's own default, written out so a profile can
+# see what it is changing. An id-targeted patch in the profile's own
+# cordis.patch.yml REPLACES this whole `config` block, so restate every key you
+# want to keep — the price tables included.
+#
+# `timezone` and `root` are deliberately empty: empty means "the timezone this
+# host runs in" and "$DSH_HOME/dsh-balance", which is right on every machine
+# whose clock and harness home are where their owner put them.
+#
+# `prices.tables` holds one price list per currency the provider bills in, and
+# the list used is the one matching the account's own balance currency (falling
+# back to `currency` above, then USD). Add a third key to price a third
+# currency. The numbers below are per 1M tokens, transcribed on 2026-08-23 from
+# https://api-docs.deepseek.com/zh-cn/quick_start/pricing (CNY) and
+# https://api-docs.deepseek.com/quick_start/pricing (USD). In both, `base`
+# carries the off-peak rate and the `peak` schedule doubles it — each page's
+# own way of saying that off-peak is half of peak. The two lists describe the
+# same instants in their own timezones: 09:00 Beijing is 01:00 UTC. Keeping
+# these current is the deployment's job; nothing is fetched at runtime.
+- insert:
+    - id: balance
+      name: '@sumomok/dsh-balance'
+      config:
+        refreshMs: 60000
+        retryMs: 15000
+        timeoutMs: 8000
+        currency: [CNY, USD]
+        lowBalance: 10
+        criticalBalance: 1
+        ledgerDays: 400
+        timezone: ''
+        root: ''
+        surfaces:
+          footer: true
+          sessionSpend: true
+        prices:
+          asOf: '2026-08-23'
+          tables:
+            CNY:
+              entries:
+                - model: deepseek-v4-flash
+                  provider: deepseek-official
+                  per: 1000000
+                  timezone: Asia/Shanghai
+                  baseName: off-peak
+                  base: { input: 1.5, inputCacheHit: 0.05, output: 4.5 }
+                  schedules:
+                    - name: peak
+                      multiplier: 2
+                      windows:
+                        - { start: '09:00', end: '12:00', days: [1, 2, 3, 4, 5] }
+                        - { start: '14:00', end: '18:00', days: [1, 2, 3, 4, 5] }
+                - model: deepseek-v4-pro
+                  provider: deepseek-official
+                  per: 1000000
+                  timezone: Asia/Shanghai
+                  baseName: off-peak
+                  base: { input: 4.5, inputCacheHit: 0.15, output: 13.5 }
+                  schedules:
+                    - name: peak
+                      multiplier: 2
+                      windows:
+                        - { start: '09:00', end: '12:00', days: [1, 2, 3, 4, 5] }
+                        - { start: '14:00', end: '18:00', days: [1, 2, 3, 4, 5] }
+                - model: deepseek-v4-flash-vision-exp
+                  provider: deepseek-official
+                  per: 1000000
+                  timezone: Asia/Shanghai
+                  baseName: off-peak
+                  base: { input: 1.5, inputCacheHit: 0.05, output: 4.5 }
+                  schedules:
+                    - name: peak
+                      multiplier: 2
+                      windows:
+                        - { start: '09:00', end: '12:00', days: [1, 2, 3, 4, 5] }
+                        - { start: '14:00', end: '18:00', days: [1, 2, 3, 4, 5] }
+            USD:
+              entries:
+                - model: deepseek-v4-flash
+                  provider: deepseek-official
+                  per: 1000000
+                  timezone: UTC
+                  baseName: off-peak
+                  base: { input: 0.22, inputCacheHit: 0.007, output: 0.66 }
+                  schedules:
+                    - name: peak
+                      multiplier: 2
+                      windows:
+                        - { start: '01:00', end: '04:00', days: [1, 2, 3, 4, 5] }
+                        - { start: '06:00', end: '10:00', days: [1, 2, 3, 4, 5] }
+                - model: deepseek-v4-pro
+                  provider: deepseek-official
+                  per: 1000000
+                  timezone: UTC
+                  baseName: off-peak
+                  base: { input: 0.66, inputCacheHit: 0.022, output: 1.98 }
+                  schedules:
+                    - name: peak
+                      multiplier: 2
+                      windows:
+                        - { start: '01:00', end: '04:00', days: [1, 2, 3, 4, 5] }
+                        - { start: '06:00', end: '10:00', days: [1, 2, 3, 4, 5] }
+                - model: deepseek-v4-flash-vision-exp
+                  provider: deepseek-official
+                  per: 1000000
+                  timezone: UTC
+                  baseName: off-peak
+                  base: { input: 0.22, inputCacheHit: 0.007, output: 0.66 }
+                  schedules:
+                    - name: peak
+                      multiplier: 2
+                      windows:
+                        - { start: '01:00', end: '04:00', days: [1, 2, 3, 4, 5] }
+                        - { start: '06:00', end: '10:00', days: [1, 2, 3, 4, 5] }
