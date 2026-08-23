@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildQuotePayload, capQuoteText, decodeQuoteRef, encodeQuoteRef, QUOTE_TEXT_LIMIT,
-  quoteBlock, quoteHeader, serializeQuote, type QuoteHeaderWords,
+  quoteBlock, serializeQuote,
 } from '../src/core/quote.ts'
 
-/** The two shipped vocabularies, as the client reads them off the locale service. */
-const ZH: QuoteHeaderWords = { quote: '引用', user: '用户消息', assistant: '助手消息' }
-const EN: QuoteHeaderWords = { quote: 'quote', user: 'user message', assistant: 'assistant message' }
+/** The two shipped header lines, as the client reads them off the locale service. */
+const ZH = '引用：'
+const EN = 'Quote:'
 
 describe('capQuoteText', () => {
   it('keeps a text at or below the limit unchanged and reports no total', () => {
@@ -46,49 +46,27 @@ describe('buildQuotePayload', () => {
   })
 })
 
-describe('quoteHeader', () => {
-  it('names role and seq', () => {
-    expect(quoteHeader({ text: '', seq: 12, role: 'assistant' }, ZH)).toBe('[引用 #12 助手消息]')
-    expect(quoteHeader({ text: '', seq: 7, role: 'user' }, ZH)).toBe('[引用 #7 用户消息]')
-  })
-
-  it('adds the message id when the host recorded one', () => {
-    expect(quoteHeader({ text: '', seq: 12, role: 'assistant', messageId: 'msg_9' }, ZH))
-      .toBe('[引用 #12 助手消息 msg_9]')
-  })
-
-  it('follows the interface language it was given', () => {
-    expect(quoteHeader({ text: '', seq: 12, role: 'assistant', messageId: 'msg_9' }, EN))
-      .toBe('[quote #12 assistant message msg_9]')
-    expect(quoteHeader({ text: '', seq: 7, role: 'user' }, EN)).toBe('[quote #7 user message]')
-    expect(quoteHeader({ text: '' }, EN)).toBe('[quote]')
-  })
-
-  it('degrades to a bare marker when the source is unknown', () => {
-    expect(quoteHeader({ text: '' }, ZH)).toBe('[引用]')
-  })
-
-  it('names the position alone when a row carries a seq but no role', () => {
-    expect(quoteHeader({ text: '', seq: 34 }, ZH)).toBe('[引用 #34]')
-  })
-})
-
 describe('quoteBlock', () => {
   it('prefixes every line, and keeps a bare marker on an empty line', () => {
     expect(quoteBlock({ text: 'first\n\nsecond', seq: 3, role: 'user' }, ZH)).toBe(
-      '> [引用 #3 用户消息]\n> first\n>\n> second',
+      '> 引用：\n> first\n>\n> second',
     )
+  })
+
+  it('opens with the header line alone — no position, no role, whatever the payload knows', () => {
+    const rich = { text: 'body', seq: 12, role: 'assistant' as const, messageId: 'msg_9' }
+    expect(quoteBlock(rich, EN)).toBe('> Quote:\n> body')
   })
 
   it('keeps the truncation note in English, a measurement rather than prose', () => {
     expect(quoteBlock({ text: 'kept', seq: 3, role: 'user', totalChars: 9000 }, EN)).toBe(
-      '> [quote #3 user message]\n> kept\n> …(truncated, 9000 chars total)',
+      '> Quote:\n> kept\n> …(truncated, 9000 chars total)',
     )
   })
 
   it('appends the truncation note as its own quoted line', () => {
     expect(quoteBlock({ text: 'kept', seq: 3, role: 'user', totalChars: 9000 }, ZH)).toBe(
-      '> [引用 #3 用户消息]\n> kept\n> …(truncated, 9000 chars total)',
+      '> 引用：\n> kept\n> …(truncated, 9000 chars total)',
     )
   })
 })
@@ -96,7 +74,22 @@ describe('quoteBlock', () => {
 describe('serializeQuote', () => {
   it('opens on its own line and closes the blockquote with a blank line', () => {
     expect(serializeQuote({ text: 'body', seq: 1, role: 'user' }, ZH))
-      .toBe('\n> [引用 #1 用户消息]\n> body\n\n')
+      .toBe('\n> 引用：\n> body\n\n')
+  })
+})
+
+describe('the host message id', () => {
+  const carried = buildQuotePayload({ text: 'body', seq: 12, role: 'assistant', messageId: 'msg_9' })
+
+  it('survives the round trip, because resolution may want it', () => {
+    expect(decodeQuoteRef(encodeQuoteRef(carried)).messageId).toBe('msg_9')
+  })
+
+  it('reaches none of the projections a human or the model reads', () => {
+    // quoteBlock is also the chip's clipboardText, so this covers copy/paste.
+    for (const projection of [quoteBlock(carried, ZH), serializeQuote(carried, EN)]) {
+      expect(projection).not.toContain('msg_9')
+    }
   })
 })
 
@@ -108,7 +101,7 @@ describe('the reference payload', () => {
 
   it('serializes from the payload alone, with no lookup into plugin state', () => {
     const ref = encodeQuoteRef(buildQuotePayload({ text: 'carried', seq: 2, role: 'user' }))
-    expect(serializeQuote(decodeQuoteRef(ref), ZH)).toBe('\n> [引用 #2 用户消息]\n> carried\n\n')
+    expect(serializeQuote(decodeQuoteRef(ref), ZH)).toBe('\n> 引用：\n> carried\n\n')
   })
 
   it('refuses an unreadable reference instead of inventing a quote', () => {
