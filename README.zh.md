@@ -1,4 +1,4 @@
-# @haoran/dsh-quote-message
+# @sumomok/dsh-quote-message
 
 [English](README.md) | 中文
 
@@ -50,10 +50,10 @@
 ```sh
 pnpm run build
 cd packages/quote-message && pnpm pack --pack-destination ../../dist
-dsh plugin --profile <name> add ../../dist/haoran-dsh-quote-message-0.1.0.tgz
+dsh plugin --profile <name> add ../../dist/sumomok-dsh-quote-message-0.1.0.tgz
 ```
 
-发布之后，`dsh plugin --profile <name> add @haoran/dsh-quote-message` 从 npm 装同一份东西。
+发布之后，`dsh plugin --profile <name> add @sumomok/dsh-quote-message` 从 npm 装同一份东西。
 
 清单里声明了 `dsh.bundle.patch`，所以安装会把本包追加进 profile 的 `dsh.profile.bundles`，由它的 patch 层挂载插件；profile 自己的 `cordis.patch.yml` 不需要任何改动。请装 tarball 而不是 `link:` 路径——被 link 的副本会解析到自己的 `@deepseek-ai/*` 并加载第二个 cordis，插件拿到的服务注册表就不是应用真正在跑的那个了。
 

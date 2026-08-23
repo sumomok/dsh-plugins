@@ -9,7 +9,7 @@
  * selection belongs to is read from the host's own `data-chat-flow-key`
  * attribute (see core/chat-dom.ts).
  *
- * @module @haoran/dsh-quote-message/client/QuoteDock
+ * @module @sumomok/dsh-quote-message/client/QuoteDock
  */
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'

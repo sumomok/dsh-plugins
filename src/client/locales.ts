@@ -7,7 +7,7 @@
  * chip inserted before a language switch still serializes in the language the
  * user is working in when they send.
  *
- * @module @haoran/dsh-quote-message/client/locales
+ * @module @sumomok/dsh-quote-message/client/locales
  */
 
 /** Locale namespace this plugin owns. */

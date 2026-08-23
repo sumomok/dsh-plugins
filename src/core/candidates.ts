@@ -3,7 +3,7 @@
  * session's conversation snapshot. Pure: the client half hands in the node
  * list and the localized role words, everything else is computed here.
  *
- * @module @haoran/dsh-quote-message/core/candidates
+ * @module @sumomok/dsh-quote-message/core/candidates
  */
 import type { ConversationNode, UserMessageNode } from '@deepseek-ai/dsh-client-runtime/client'
 import type { QuoteRole } from './quote.ts'
