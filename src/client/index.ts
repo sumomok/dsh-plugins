@@ -25,7 +25,8 @@ import {
   candidateName, filterQuoteSources, quoteSourceBySeq, quoteSources, type QuoteSource,
 } from '../core/candidates.ts'
 import {
-  buildQuotePayload, decodeQuoteRef, quoteBlock, serializeQuote, type QuotePayload,
+  buildQuotePayload, decodeQuoteRef, quoteBlock, serializeQuote,
+  type QuoteHeaderWords, type QuotePayload,
 } from '../core/quote.ts'
 import { en, NS, zh, type QuoteKey } from './locales.ts'
 import { QuoteDock } from './QuoteDock.tsx'
@@ -48,6 +49,19 @@ export const inject = ['slots', 'locale', 'sessions', 'inputTriggers']
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'quote-message: dictionaries')
   const t = ctx.locale.bind(NS)
+
+  // Read per call, never captured: the header follows the language the user is
+  // working in when the draft is sent, not the one in effect when the chip was
+  // inserted.
+  const headerWords = (): QuoteHeaderWords => ({
+    quote: t('header.quote'),
+    user: t('header.user'),
+    assistant: t('header.assistant'),
+  })
+
+  /** The chip for one quote, with its label and clipboard block in the active locale. */
+  const referenceFor = (payload: QuotePayload) =>
+    quoteReference(payload, chipLabel(payload, t), quoteBlock(payload, headerWords()))
 
   /** Quotable messages of one session, read from the live snapshot at call time. */
   const sourcesOf = (sessionId: SessionId): QuoteSource[] => {
@@ -74,19 +88,21 @@ export function apply(ctx: ClientContext): void {
       if (candidate.value === undefined) return undefined
       const picked = quoteSourceBySeq(sourcesOf(session.sessionId), Number(candidate.value))
       if (picked === undefined) return undefined
-      const payload = buildQuotePayload(picked)
-      return { insert: quoteReference(payload, chipLabel(payload, t)) }
+      return { insert: referenceFor(buildQuotePayload(picked)) }
     },
     codec: {
-      clipboardText: ref => quoteBlock(decodeQuoteRef(ref)),
-      serialize: ref => Promise.resolve(serializeQuote(decodeQuoteRef(ref))),
+      clipboardText: ref => quoteBlock(decodeQuoteRef(ref), headerWords()),
+      serialize: ref => Promise.resolve(serializeQuote(decodeQuoteRef(ref), headerWords())),
     },
   }
   const inputTriggers = ctx.get('inputTriggers') as InputTriggerServiceContract
   ctx.effect(() => inputTriggers.registerSource(source), 'quote-message: @message source')
 
-  const quote = (sessionId: SessionId, payload: QuotePayload, draftRev: number): boolean =>
-    insertQuoteReference(ctx, sessionId, quoteReference(payload, chipLabel(payload, t)), draftRev)
+  const quote = (
+    sessionId: SessionId,
+    payload: QuotePayload,
+    input: { readonly draft: string; readonly draftRev: number },
+  ): boolean => insertQuoteReference(ctx, sessionId, referenceFor(payload), input)
 
   // A dock entry is the session-scope seat that lives exactly as long as the
   // chat it watches, and it hands the component the conversation snapshot and

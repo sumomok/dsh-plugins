@@ -14,7 +14,7 @@ Pasting by hand loses the source: the model sees text with no indication that it
 
 ## The two entry points
 
-**Select → quote.** Select text inside any chat message — a user prompt, an assistant reply, the text of a tool result — and a small `Quote` pill appears above the selection. Click it and the chip lands at the start of your draft, before whatever you were typing. Escape, a click elsewhere, or scrolling dismisses the pill, and it never takes focus away from the composer.
+**Select → quote.** Select text inside any chat message — a user prompt, an assistant reply, the text of a tool result — and a small `Quote` pill appears above the selection. Click it and the chip is appended to the end of your draft, followed by the composer's own separating space. It goes to the end rather than the caret because the input machine publishes no caret: its draft state carries the text and a revision counter, nothing about where you are in it. Escape, a click elsewhere, or scrolling dismisses the pill, and it never takes focus away from the composer.
 
 **`@message`.** Type `@` in the composer and the menu carries a *Messages in this session* group listing this session's messages, newest first, as `#12 assistant · the first 80 characters …`. Typing filters on the message text. Picking one inserts the same chip, carrying the whole message.
 
@@ -25,21 +25,22 @@ Both produce one chip. It renders like the built-in `@file` / `@session` chips, 
 Each chip expands, at submit time, into one markdown blockquote spliced in where the chip sat:
 
 ```
-> [引用 #12 助手消息 msg_01J…]
+> [quote #12 assistant message msg_01J…]
 > the first quoted line
 >
 > the second quoted line
 ```
 
-The header names the source: `#<seq>` is the session event position, followed by `用户消息` (user message) or `助手消息` (assistant message), plus the host's message id when it recorded one. A selection that spans several messages, or sits in a row that is not a message, quotes as `[引用]` or `[引用 #34]` — the position without a role — rather than not quoting at all.
+The header names the source: `#<seq>` is the session event position, followed by the role, plus the host's message id when it recorded one. A selection that spans several messages, or sits in a row that is not a message, quotes as `[quote]` or `[quote #34]` — the position without a role — rather than not quoting at all.
 
-The header wording is fixed rather than translated: it is text the model reads, and it must not change with the reader's interface language.
+The header follows the interface language, read at the moment you send rather than the moment you insert, so the same chip serializes as `[quote #12 assistant message]` in English and `[引用 #12 助手消息]` in Chinese. The truncation note below stays English in both: it measures the excerpt rather than addressing the reader.
 
 Nothing else is injected. The blockquote is part of your prompt, and the host logs it as the ordinary `user/message` it is.
 
 ## Limits
 
 - **4000 characters per quote.** A longer message is cut at 4000 code points and the block ends with `…(truncated, 9123 chars total)`, so the model knows it is reading an excerpt.
+- **The pill appends; it does not insert at the caret.** The published input state carries no caret to insert at.
 - **This session only.** Cross-session citation is what the host's own `@session` reference is for.
 - **Text only.** Images and attachments in the quoted message are not carried, and assistant reasoning blocks are not quoted — a quote carries what was said.
 - **Remove and re-quote to change one.** A chip is not editable in place.
