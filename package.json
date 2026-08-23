@@ -28,7 +28,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/sumomok/dsh-plugins",
+    "url": "git+https://github.com/sumomok/dsh-plugins.git",
     "directory": "packages/quote-message"
   },
   "keywords": [
