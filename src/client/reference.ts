@@ -35,10 +35,14 @@ export function chipLabel(payload: QuotePayload, t: Translate<QuoteKey>): string
 }
 
 /**
- * Build the reference insert for one quote. No `appearance`: that union names
- * the host's own domains (session / file / folder), and an entry without one
- * renders the plain chip — the `@` glyph plus our label — which is what a
- * quote is.
+ * Build the reference insert for one quote.
+ *
+ * `appearance` is `session` — the closest of the three the host's chip
+ * renderer knows (session / file / folder), and a quote does point at a
+ * message in the current session. It is not decoration: an entry without an
+ * appearance renders a bare `@` where every first-party chip renders a domain
+ * glyph, so the quote chip would be the one reference in the composer that
+ * does not look like a reference.
  * @param payload - the quote payload (the chip carries the text itself).
  * @param label - inline label from {@link chipLabel}.
  * @param clipboardText - the block a copy of the draft carries.
@@ -49,6 +53,7 @@ export function quoteReference(payload: QuotePayload, label: string, clipboardTe
     source: QUOTE_SOURCE_NAME,
     ref: encodeQuoteRef(payload),
     label,
+    appearance: 'session',
     clipboardText,
   }
 }

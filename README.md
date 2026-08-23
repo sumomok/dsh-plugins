@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Cite earlier content of the **current** session while you compose: select a passage in any chat message, or pick a whole message with `@message`, and a native reference chip carries that text into your prompt.
+Cite earlier content of the **current** session while you compose: select a passage in any chat message and a native reference chip carries that text into your prompt.
 
 The model then knows exactly what "this" refers to, and you did not retype it.
 
@@ -12,28 +12,28 @@ A conversation of any length makes pronouns expensive. "Fix the second problem y
 
 Pasting by hand loses the source: the model sees text with no indication that it is a quotation of its own earlier answer, or of your own earlier prompt. This plugin makes the citation explicit — role, position, and the text — in one chip you can see before you send.
 
-## The two entry points
+## How it works
 
 **Select → quote.** Select text inside any chat message — a user prompt, an assistant reply, the text of a tool result — and a small `Quote` pill appears above the selection. Click it and the chip is appended to the end of your draft, followed by the composer's own separating space. It goes to the end rather than the caret because the input machine publishes no caret: its draft state carries the text and a revision counter, nothing about where you are in it. Escape, a click elsewhere, or scrolling dismisses the pill, and it never takes focus away from the composer.
 
-**`@message`.** Type `@` in the composer and the menu carries a *Messages in this session* group listing this session's messages, newest first, as `#12 assistant · the first 80 characters …`. Typing filters on the message text. Picking one inserts the same chip, carrying the whole message.
+The chip renders like the built-in `@file` / `@session` chips — same height, same colour, and a session glyph in place of the `@`, because a quote points at a message in this session — survives editing around it, and is expanded only when you send.
 
-Both produce one chip. It renders like the built-in `@file` / `@session` chips, survives editing around it, and is expanded only when you send.
+**`@` is not ours.** The trigger belongs to files and sessions; this plugin adds no group to that menu. It registers one trigger source carrying nothing but the codec, because a reference occurrence is expanded by looking its source name up in that roster — the registration is what makes a chip sendable, not a way onto the menu.
 
 ## What the model receives
 
 Each chip expands, at submit time, into one markdown blockquote spliced in where the chip sat:
 
 ```
-> [quote #12 assistant message msg_01J…]
+> Quote:
 > the first quoted line
 >
 > the second quoted line
 ```
 
-The header names the source: `#<seq>` is the session event position, followed by the role, plus the host's message id when it recorded one. A selection that spans several messages, or sits in a row that is not a message, quotes as `[quote]` or `[quote #34]` — the position without a role — rather than not quoting at all.
+The header says one thing: that what follows is a quotation. Position, role, and the host's internal message id stay out of it — those are your context for choosing the passage, not the model's for reading it. The chip still carries them in its own payload (its label reads `Quote #12 assistant`, and a future resolver can use the id), and no projection a human or the model reads ever prints the id.
 
-The header follows the interface language, read at the moment you send rather than the moment you insert, so the same chip serializes as `[quote #12 assistant message]` in English and `[引用 #12 助手消息]` in Chinese. The truncation note below stays English in both: it measures the excerpt rather than addressing the reader.
+The header follows the interface language, read at the moment you send rather than the moment you insert: `Quote:` in English, `引用：` in Chinese. The truncation note below stays English in both — it measures the excerpt rather than addressing the reader.
 
 Nothing else is injected. The blockquote is part of your prompt, and the host logs it as the ordinary `user/message` it is.
 
@@ -44,13 +44,14 @@ Nothing else is injected. The blockquote is part of your prompt, and the host lo
 - **This session only.** Cross-session citation is what the host's own `@session` reference is for.
 - **Text only.** Images and attachments in the quoted message are not carried, and assistant reasoning blocks are not quoted — a quote carries what was said.
 - **Remove and re-quote to change one.** A chip is not editable in place.
+- **Selection only.** There is no picker: quoting starts from text you select in the chat.
 
 ## Install
 
 ```sh
 pnpm run build
 cd packages/quote-message && pnpm pack --pack-destination ../../dist
-dsh plugin --profile <name> add ../../dist/sumomok-dsh-quote-message-0.1.0.tgz
+dsh plugin --profile <name> add ../../dist/sumomok-dsh-quote-message-0.1.1.tgz
 ```
 
 Once published, `dsh plugin --profile <name> add @sumomok/dsh-quote-message` installs the same thing from npm.
