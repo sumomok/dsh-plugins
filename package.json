@@ -1,7 +1,7 @@
 {
   "name": "@sumomok/dsh-quote-message",
-  "description": "Quote earlier content of the current session into the composer: select any passage in the chat, or pick a whole message with @message, and a native reference chip carries the text into the prompt",
-  "version": "0.1.1",
+  "description": "Quote earlier content of the current session into the composer: select any passage in the chat and a native reference chip carries the text into the prompt, rendered back as a quote card above your message",
+  "version": "0.2.0",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",

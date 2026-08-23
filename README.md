@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Cite earlier content of the **current** session while you compose: select a passage in any chat message and a native reference chip carries that text into your prompt.
+Cite earlier content of the **current** session while you compose: select a passage in any chat message and a native reference chip carries that text into your prompt. When you send it, the quote comes back as its own card above your message instead of a row of `>` lines inside it.
 
 The model then knows exactly what "this" refers to, and you did not retype it.
 
@@ -37,6 +37,14 @@ The header follows the interface language, read at the moment you send rather th
 
 Nothing else is injected. The blockquote is part of your prompt, and the host logs it as the ordinary `user/message` it is.
 
+## In the transcript
+
+A sent quote does not stay a run of `>` lines inside your bubble. The plugin lifts it into its own card above the message: a muted `Quote` head, the quoted text, and a 2px accent down the left edge, in the same right-aligned column the bubble uses. A card longer than four lines clamps with a `Show more` toggle; the toggle appears only when the text really overflows, and expanding is a view state, not something stored.
+
+This is a **shadow**, not a patch. The keyed `conversation.chat.node` slot renders the lowest-priority live entry of each cell, so this plugin registers for `user` and `steering` at `priority: -1`, reads the host's own renderer out of the slot ledger, and hands everything back to it — the host entry stays registered at its default priority and is never replaced or imported. A message with no quote block reaches it untouched: the render test asserts byte-identical markup against the incumbent rendered alone, and a browser capture of a plain message with and without the plugin installed differs in 20 of 287264 pixels, all inside the scrollbar column, none by more than 2/255.
+
+**Retirement.** The day the harness renders quoted content itself, this half of the plugin is deleted and only the serialization stays. The shadow exists because the client publishes no submit-phase seam and no per-message decoration slot: a quote has to travel inside the prompt text, so lifting it back out can only be a render-time decision.
+
 ## Limits
 
 - **4000 characters per quote.** A longer message is cut at 4000 code points and the block ends with `…(truncated, 9123 chars total)`, so the model knows it is reading an excerpt.
@@ -45,13 +53,15 @@ Nothing else is injected. The blockquote is part of your prompt, and the host lo
 - **Text only.** Images and attachments in the quoted message are not carried, and assistant reasoning blocks are not quoted — a quote carries what was said.
 - **Remove and re-quote to change one.** A chip is not editable in place.
 - **Selection only.** There is no picker: quoting starts from text you select in the chat.
+- **Copy copies the remainder, not the quote.** The host's copy action reads the bubble's own content, and the quote is no longer in it; on a quote-only message it copies nothing. The card's text is selectable, and the session log still holds the whole prompt.
+- **Only a quote at an end of the message becomes a card.** A `>` run in the middle is your own prose and stays where you put it.
 
 ## Install
 
 ```sh
 pnpm run build
 cd packages/quote-message && pnpm pack --pack-destination ../../dist
-dsh plugin --profile <name> add ../../dist/sumomok-dsh-quote-message-0.1.1.tgz
+dsh plugin --profile <name> add ../../dist/sumomok-dsh-quote-message-0.2.0.tgz
 ```
 
 Once published, `dsh plugin --profile <name> add @sumomok/dsh-quote-message` installs the same thing from npm.
@@ -70,13 +80,13 @@ This plugin is **client-only**. Its host half is a no-op that exists so the load
 - **No host routes, no host services, no RPC.** Nothing is added to the web server or the remote API.
 - **No storage.** The quote lives in the composer draft and nowhere else; there is no cache, no local storage, and no state that survives a reload.
 
-What it does touch: the conversation snapshot of the current session (read), the input trigger registry (one `@` source), one slot in the composer dock, and `document` selection events.
+What it does touch: the conversation snapshot of the current session (read), the input trigger registry (one `@` source), one slot in the composer dock, two keyed chat-node cells it shadows to draw the card, and `document` selection events.
 
 ## Compatibility
 
 Built against `@deepseek-ai/*` `0.1.1-rc.2` — a host of that generation (desktop app or source checkout). The peer ranges accept `>=0.1.0-rc.1 <0.2.0`, spelled so prerelease hosts match: `^0.1.0-rc.7` does **not** satisfy `0.1.1-rc.2` under semver prerelease rules.
 
-The seams it uses are the published ones: `inputTriggers.registerSource` with a `ReferenceInsert` outcome and a `ReferenceCodec`, the `conversation.input.dock` slot, and the scoped `slash/input-insert-reference` event. It does no DOM surgery on host-rendered bubbles, intercepts no composer keystroke, and installs no MutationObserver — the one thing it reads out of the host's DOM is the `data-chat-flow-key` attribute the web client puts on every chat row for its own scroll anchoring.
+The seams it uses are the published ones: `inputTriggers.registerSource` with a `ReferenceInsert` outcome and a `ReferenceCodec`, the `conversation.input.dock` slot, the scoped `slash/input-insert-reference` event, and the keyed `conversation.chat.node` slot, entered at `priority: -1` for `user` and `steering` (documented shadowing: lowest live priority renders). It does no DOM surgery on host-rendered bubbles, intercepts no composer keystroke, and installs no MutationObserver — the one thing it reads out of the host's DOM is the `data-chat-flow-key` attribute the web client puts on every chat row for its own scroll anchoring.
 
 ## License
 

@@ -22,6 +22,9 @@ export const zh = {
   'chip.label': '引用 #{seq} {role}',
   'chip.labelUnknown': '引用',
   'header.line': '引用：',
+  'card.head': '引用',
+  'card.expand': '展开',
+  'card.collapse': '收起',
 }
 
 /** English copy. */
@@ -33,6 +36,9 @@ export const en: Record<QuoteKey, string> = {
   'chip.label': 'Quote #{seq} {role}',
   'chip.labelUnknown': 'Quote',
   'header.line': 'Quote:',
+  'card.head': 'Quote',
+  'card.expand': 'Show more',
+  'card.collapse': 'Show less',
 }
 
 /** Dictionary key domain. */

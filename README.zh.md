@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-在输入框里精确引用**当前会话**已有的内容：在任意消息里选中一段话，一枚原生引用 chip 就把那段文字带进这次提问。
+在输入框里精确引用**当前会话**已有的内容：在任意消息里选中一段话，一枚原生引用 chip 就把那段文字带进这次提问。发出去之后，引文不会以一串 `>` 留在气泡里，而是变成气泡上方一张独立的引用卡片。
 
 模型于是确切知道"这个"指的是什么，而你没有重新打一遍。
 
@@ -37,6 +37,14 @@ chip 和内置的 `@file` / `@session` chip 一样渲染——同样的高度、
 
 除此之外不注入任何东西。引用块就是你这次提问的一部分，宿主按普通的 `user/message` 记账。
 
+## 在转录里长什么样
+
+发出去的引用不会以一串 `>` 留在气泡内部。插件把它提到消息上方，渲染成一张独立的卡片：一行淡色的 `引用` 抬头、引文本身、左侧 2px 的强调边，宽度和气泡共用同一列。超过四行的卡片折叠，并给出 `展开` / `收起`；这个按钮只在文字真的溢出时出现，展开状态属于当前视图，不做持久化。
+
+这是**遮挡**，不是打补丁。keyed 的 `conversation.chat.node` 槽位渲染每个格子里优先级最低的那个在册条目，所以本插件用 `priority: -1` 注册 `user` 和 `steering` 两个格子，从槽位账本里取出宿主自己的渲染器，把其余一切原样交回去——宿主条目仍以默认优先级在册，既没有被替换也没有被 import。不含引用块的消息原封不动地抵达它：渲染测试断言产出的标记与单独渲染宿主组件逐字节相同；浏览器里对同一条普通消息在装与不装插件两种状态下截图，287264 个像素中有 20 个不同，全部落在滚动条那一列，且差值不超过 2/255。
+
+**退场条件。** 宿主哪天自己渲染引用内容，插件的这一半就删掉，只留序列化。遮挡之所以存在，是因为客户端没有发送阶段的缝，也没有按消息挂装饰的槽位：引文只能藏在提问正文里传过去，于是把它再取出来只能是渲染期的决定。
+
 ## 边界
 
 - **每条引用 4000 字符。** 更长的消息按码点截断到 4000，块尾补一行 `…(truncated, 9123 chars total)`，让模型知道自己读到的是节选。
@@ -45,13 +53,15 @@ chip 和内置的 `@file` / `@session` chip 一样渲染——同样的高度、
 - **只带文字。** 被引用消息里的图片和附件不会被带上，助手的思维链也不引用——引用带走的是"说了什么"。
 - **要改就删掉重引。** chip 插入后不支持原地编辑。
 - **只从选区开始。** 没有选择器：引用的起点永远是你在会话里选中的那段文字。
+- **复制按钮复制的是余下正文，不含引文。** 宿主的复制读的是气泡自己的内容，而引文已经不在里面；只有引文、没有正文的消息复制出来是空的。卡片里的文字可以直接选中，会话日志里也仍是完整提问。
+- **只有落在消息两端的引用块才变成卡片。** 夹在中间的 `>` 是你自己写的散文，留在原处。
 
 ## 安装
 
 ```sh
 pnpm run build
 cd packages/quote-message && pnpm pack --pack-destination ../../dist
-dsh plugin --profile <name> add ../../dist/sumomok-dsh-quote-message-0.1.1.tgz
+dsh plugin --profile <name> add ../../dist/sumomok-dsh-quote-message-0.2.0.tgz
 ```
 
 发布之后，`dsh plugin --profile <name> add @sumomok/dsh-quote-message` 从 npm 装同一份东西。
@@ -70,13 +80,13 @@ profile 里需要有组装 Web 界面的 bundle（`@deepseek-ai/dsh-web-app`）�
 - **不加宿主路由、不加宿主服务、不加 RPC。** Web 服务器和远程 API 上都没有它的新增面。
 - **不做持久化。** 引用只活在输入框草稿里，没有缓存、没有 local storage、没有跨刷新的状态。
 
-它确实接触的东西：当前会话的对话快照（只读）、输入触发器注册表（一个 `@` source）、输入区 dock 的一个槽位，以及 `document` 上的选区事件。
+它确实接触的东西：当前会话的对话快照（只读）、输入触发器注册表（一个 `@` source）、输入区 dock 的一个槽位、被它遮挡用来画卡片的两个 keyed 聊天节点格子，以及 `document` 上的选区事件。
 
 ## 兼容性
 
 针对 `@deepseek-ai/*` `0.1.1-rc.2` 构建，对应这一代宿主（桌面应用或源码检出）。peer 范围写成 `>=0.1.0-rc.1 <0.2.0` 是为了让预发布版本的宿主能匹配上：按 semver 的预发布规则，`^0.1.0-rc.7` **匹配不上** `0.1.1-rc.2`。
 
-它用的都是公开的缝：`inputTriggers.registerSource`（`ReferenceInsert` 结果 + `ReferenceCodec`）、`conversation.input.dock` 槽位、以及作用域事件 `slash/input-insert-reference`。它不对宿主渲染的气泡做 DOM 手术，不拦截输入框按键，也不装 MutationObserver——它从宿主 DOM 里读的唯一一样东西，是 Web 客户端为自己的滚动锚定打在每个聊天行上的 `data-chat-flow-key` 属性。
+它用的都是公开的缝：`inputTriggers.registerSource`（`ReferenceInsert` 结果 + `ReferenceCodec`）、`conversation.input.dock` 槽位、作用域事件 `slash/input-insert-reference`，以及 keyed 的 `conversation.chat.node` 槽位——以 `priority: -1` 进 `user` 和 `steering` 两个格子（文档化的遮挡语义：优先级最低者渲染）。它不对宿主渲染的气泡做 DOM 手术，不拦截输入框按键，也不装 MutationObserver——它从宿主 DOM 里读的唯一一样东西，是 Web 客户端为自己的滚动锚定打在每个聊天行上的 `data-chat-flow-key` 属性。
 
 ## 许可
 
