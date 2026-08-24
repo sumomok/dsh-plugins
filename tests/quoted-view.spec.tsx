@@ -75,13 +75,27 @@ describe('QuotedUserNodeView', () => {
     expect(render(text)).toBe(bare)
   })
 
-  it('lifts the quote into a card and hands the incumbent the rest', () => {
+  it('lifts the quote above the bubble and hands the incumbent the rest', () => {
     const html = render('> 引用：\n> quoted line\n\nmy question')
     expect(html).toContain('data-quote-message-cards')
     expect(html).toContain('quoted line')
     expect(html).toContain('<div data-bubble="">host:probe|my question</div>')
-    // The heading line is the plugin's own marker, never card content.
-    expect(html).not.toContain('引用：')
+    // The heading line is the plugin's own marker for the model, never
+    // displayed — and with the head label gone, the word appears nowhere.
+    expect(html).not.toContain('引用')
+  })
+
+  it('renders a rule and text: no box, no background, no head label', () => {
+    const html = render('> Quote:\n> cited passage\n\nask')
+    expect(html).toContain('border-left:2px solid var(--dsw-alias-border-l4')
+    expect(html).not.toContain('border-radius')
+    expect(html).not.toContain('background')
+    expect(html).not.toContain('>Quote<')
+  })
+
+  it('collapses a quote at three lines', () => {
+    const html = render('> Quote:\n> one\n> two\n> three\n> four\n\nask')
+    expect(html).toContain('-webkit-line-clamp:3')
   })
 
   it('gives the incumbent the host translate, not this plugin\'s', () => {

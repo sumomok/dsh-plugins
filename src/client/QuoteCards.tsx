@@ -1,6 +1,11 @@
 /**
- * The quote cards shown above a user bubble: one card per quote block, in a
- * right-aligned column the width of the bubble it belongs to.
+ * The quoted passages shown above a user bubble: one left-ruled block per
+ * quote, in a right-aligned column capped at the bubble's own width.
+ *
+ * The rendering is a bare citation — a rule and the text, no box, no head
+ * label. The `引用：` / `Quote:` line the serialization opens with is the
+ * model's marker, not the reader's: it is dropped from what is displayed and
+ * never from what is logged.
  *
  * @module @sumomok/dsh-quote-message/client/QuoteCards
  */
@@ -10,8 +15,8 @@ import type { Translate } from '@deepseek-ai/dsh-client-ui-slots'
 import { stripQuoteHeading, type QuoteBlockLines } from '../core/split-quotes.ts'
 import type { QuoteKey } from './locales.ts'
 
-/** Lines shown before the card collapses. */
-const CLAMP_LINES = 4
+/** Lines shown before a quote collapses. */
+const CLAMP_LINES = 3
 
 /**
  * The measuring effect must run before paint in a browser; without a DOM
@@ -21,7 +26,7 @@ const CLAMP_LINES = 4
 const useMeasureEffect = typeof document === 'undefined' ? useEffect : useLayoutEffect
 
 /**
- * Right-aligned column that hugs its cards, capped at `.userStack`'s own
+ * Right-aligned column that hugs its quotes, capped at `.userStack`'s own
  * width so a long quote wraps exactly where the bubble would. `fit-content`
  * keeps a short quote from reading as a banner detached from the bubble under
  * it; the 6px bottom margin is the whole gap to that bubble, because the
@@ -38,29 +43,23 @@ const COLUMN: CSSProperties = {
   marginBottom: '6px',
 }
 
-const CARD: CSSProperties = {
-  // Stretched rather than `width: 100%`: a percentage child of a
-  // `fit-content` column feeds its own percentage back into the column's
-  // intrinsic width. Stretching also keeps sibling cards the same width.
+/**
+ * One quotation: a rule and its text. `--dsw-alias-border-l4` is the host
+ * hairline token that resolves closest to the intended rule colour — about
+ * rgb(214,214,214) on the light background and rgb(66,66,66) on the dark one.
+ * The literal is only reached with no harness theme installed, where a light
+ * page is the safer assumption.
+ */
+const QUOTE: CSSProperties = {
   alignSelf: 'stretch',
-  boxSizing: 'border-box',
-  borderLeft: '2px solid var(--dsw-alias-label-caption, rgba(128, 128, 128, 0.6))',
-  borderRadius: '8px',
-  background: 'var(--dsw-specific-bubble, rgba(128, 128, 128, 0.12))',
-  padding: '8px 12px',
-  textAlign: 'left',
-}
-
-const HEAD: CSSProperties = {
-  fontSize: '12px',
-  lineHeight: '18px',
-  color: 'var(--dsw-alias-label-caption, rgba(128, 128, 128, 0.9))',
+  borderLeft: '2px solid var(--dsw-alias-border-l4, rgb(207, 211, 214))',
+  padding: '1px 0 1px 12px',
 }
 
 const BODY: CSSProperties = {
   fontSize: '14px',
   lineHeight: '20px',
-  color: 'var(--dsw-alias-label-primary, inherit)',
+  color: 'var(--dsw-alias-label-secondary, inherit)',
   whiteSpace: 'pre-wrap',
   wordBreak: 'break-word',
 }
@@ -73,19 +72,19 @@ const CLAMPED: CSSProperties = {
 }
 
 const TOGGLE: CSSProperties = {
-  marginTop: '4px',
+  marginTop: '2px',
   padding: 0,
   border: 'none',
   background: 'none',
   font: 'inherit',
   fontSize: '12px',
   lineHeight: '18px',
-  color: 'var(--dsw-alias-label-caption, rgba(128, 128, 128, 0.9))',
+  color: 'var(--dsw-alias-label-tertiary, inherit)',
   cursor: 'pointer',
 }
 
-/** One card: our own head word, then the quoted lines. */
-function QuoteCard({ lines, t }: { lines: QuoteBlockLines; t: Translate<QuoteKey> }): ReactNode {
+/** One quotation, collapsed to {@link CLAMP_LINES} until it is expanded. */
+function QuoteBlock({ lines, t }: { lines: QuoteBlockLines; t: Translate<QuoteKey> }): ReactNode {
   const [expanded, setExpanded] = useState(false)
   const [overflowing, setOverflowing] = useState(false)
   const bodyRef = useRef<HTMLDivElement | null>(null)
@@ -108,8 +107,7 @@ function QuoteCard({ lines, t }: { lines: QuoteBlockLines; t: Translate<QuoteKey
   }, [expanded, body])
 
   return (
-    <div style={CARD} data-quote-message-card="">
-      <div style={HEAD}>{t('card.head')}</div>
+    <div style={QUOTE} data-quote-message-card="">
       <div ref={bodyRef} style={expanded ? BODY : { ...BODY, ...CLAMPED }}>{body}</div>
       {overflowing && (
         <button type="button" style={TOGGLE} onClick={() => { setExpanded(value => !value) }}>
@@ -121,9 +119,9 @@ function QuoteCard({ lines, t }: { lines: QuoteBlockLines; t: Translate<QuoteKey
 }
 
 /**
- * Render one message's quote blocks as cards.
+ * Render one message's quote blocks above its bubble.
  * @param props - the blocks, the header lines to drop from them, and translate.
- * @returns the card column, or null when nothing survives the heading strip.
+ * @returns the quote column, or null when nothing survives the heading strip.
  */
 export function QuoteCards({ quotes, headings, t }: {
   readonly quotes: readonly QuoteBlockLines[]
@@ -136,7 +134,7 @@ export function QuoteCards({ quotes, headings, t }: {
   if (bodies.length === 0) return null
   return (
     <div style={COLUMN} data-quote-message-cards="">
-      {bodies.map((lines, index) => <QuoteCard key={index} lines={lines} t={t} />)}
+      {bodies.map((lines, index) => <QuoteBlock key={index} lines={lines} t={t} />)}
     </div>
   )
 }

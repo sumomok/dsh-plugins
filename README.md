@@ -39,7 +39,7 @@ Nothing else is injected. The blockquote is part of your prompt, and the host lo
 
 ## In the transcript
 
-A sent quote does not stay a run of `>` lines inside your bubble. The plugin lifts it into its own card above the message: a muted `Quote` head, the quoted text, and a 2px accent down the left edge, in the same right-aligned column the bubble uses. A card longer than four lines clamps with a `Show more` toggle; the toggle appears only when the text really overflows, and expanding is a view state, not something stored.
+A sent quote does not stay a run of `>` lines inside your bubble. The plugin lifts it above the message and sets it as a bare citation: a 2px rule down the left edge and the quoted text in secondary ink, no box and no label, in a right-aligned column that hugs the text under the bubble's own width cap. A quote longer than three lines clamps with a `Show more` toggle; the toggle appears only when the text really overflows, and expanding is a view state, not something stored. The `> Quote:` line the model reads marks a quotation rather than belonging to it, so it is dropped from what is displayed and never from what is logged.
 
 This is a **shadow**, not a patch. The keyed `conversation.chat.node` slot renders the lowest-priority live entry of each cell, so this plugin registers for `user` and `steering` at `priority: -1`, reads the host's own renderer out of the slot ledger, and hands everything back to it — the host entry stays registered at its default priority and is never replaced or imported. A message with no quote block reaches it untouched: the render test asserts byte-identical markup against the incumbent rendered alone, and a browser capture of a plain message with and without the plugin installed differs in 20 of 287264 pixels, all inside the scrollbar column, none by more than 2/255.
 
@@ -61,7 +61,7 @@ This is a **shadow**, not a patch. The keyed `conversation.chat.node` slot rende
 ```sh
 pnpm run build
 cd packages/quote-message && pnpm pack --pack-destination ../../dist
-dsh plugin --profile <name> add ../../dist/sumomok-dsh-quote-message-0.2.1.tgz
+dsh plugin --profile <name> add ../../dist/sumomok-dsh-quote-message-0.2.2.tgz
 ```
 
 Once published, `dsh plugin --profile <name> add @sumomok/dsh-quote-message` installs the same thing from npm.
