@@ -5,7 +5,6 @@
   "files": [],
   "references": [
     { "path": "./packages/balance" },
-    { "path": "./packages/edit-rerun" },
     { "path": "./packages/quote-message" }
   ]
 }
