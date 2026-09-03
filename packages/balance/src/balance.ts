@@ -1,6 +1,8 @@
 /**
- * Reading the provider's account balance: where to ask, how to read the
- * answer, and how often to ask again.
+ * Reading DeepSeek's own account balance: the endpoint, its response shape,
+ * and the DeepSeek member of the adapter registry (`adapters.ts`) — the cache
+ * class ({@link BalanceReader}) that sits in front of it is adapter-agnostic
+ * and also serves the generic fallback adapter (`generic-adapter.ts`).
  *
  * The API key is never held here. Every read resolves it through the
  * credential seam and drops it when the request completes, which is what makes
@@ -11,9 +13,9 @@
  * @module @sumomok/dsh-balance/balance
  */
 
-import type { BalanceUnavailableReason, BalanceView } from './types.ts'
+import type { BalanceSuccessView, BalanceUnavailableReason, BalanceView } from './types.ts'
 
-/** A successful read, before staleness is decided at serve time. */
+/** A successful money read, before staleness is decided at serve time. */
 type OkView = Extract<BalanceView, { state: 'ok' }>
 
 /** A failed read. */
@@ -140,10 +142,27 @@ export interface BalanceRequest {
   timeoutMs: number
 }
 
-/** The collaborators one reader needs, so tests can supply their own. */
-export interface BalanceReaderOptions {
+/**
+ * The collaborators one reader needs, so tests can supply their own.
+ *
+ * Generic over the request shape so the same cache — refresh window, retry
+ * window, in-flight de-duplication, and stale-serve on a failed refresh —
+ * serves both the DeepSeek adapter's `BalanceRequest` and the generic
+ * adapter's endpoint-shape request, with no duplicated bookkeeping between
+ * them ({@link file://./generic-adapter.ts}).
+ */
+export interface BalanceReaderOptions<Req = BalanceRequest> {
   /** Resolve the facts of the next read, or `null` while unconfigured. */
-  resolve: () => Promise<BalanceRequest | null>
+  resolve: () => Promise<Req | null>
+  /**
+   * Perform one read given resolved facts. Owns the adapter-specific wire
+   * shape; the reader itself knows only a success view (money or quota) versus an
+   * `UnavailableView`.
+   * @param request - the resolved facts.
+   * @param at - epoch milliseconds stamped on the result.
+   * @param fetchImpl - the HTTP client.
+   */
+  perform: (request: Req, at: number, fetchImpl: typeof globalThis.fetch) => Promise<BalanceSuccessView | UnavailableView>
   /** Epoch milliseconds. */
   now: () => number
   /** How long a successful read is served before a refresh is attempted. */
@@ -219,16 +238,16 @@ export async function readBalance(
  * rather than replaced by a dash: a balance from a minute ago is worth more to
  * the reader than no balance at all, as long as it says so.
  */
-export class BalanceReader {
-  private readonly options: BalanceReaderOptions
+export class BalanceReader<Req = BalanceRequest> {
+  private readonly options: BalanceReaderOptions<Req>
   private inflight: Promise<BalanceView> | undefined
-  private lastOk: OkView | undefined
+  private lastOk: BalanceSuccessView | undefined
   private lastFailure: UnavailableView | undefined
 
   /**
-   * @param options - resolution, clock, windows, and HTTP client.
+   * @param options - resolution, the read itself, clock, windows, and HTTP client.
    */
-  constructor(options: BalanceReaderOptions) {
+  constructor(options: BalanceReaderOptions<Req>) {
     this.options = options
   }
 
@@ -272,8 +291,8 @@ export class BalanceReader {
       return { state: 'unconfigured' }
     }
     const at = this.options.now()
-    const result = await readBalance(request, at, this.options.fetch)
-    if (result.state === 'ok') {
+    const result = await this.options.perform(request, at, this.options.fetch)
+    if (result.state !== 'unavailable') {
       this.lastOk = result
       this.lastFailure = undefined
       return result

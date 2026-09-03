@@ -39,17 +39,19 @@ describe('the host manifest', () => {
     expect(manifest.exports['./package.json']).toBe('./package.json')
   })
 
-  it('exports exactly the two reads, and no mutator', () => {
+  it('exports exactly the three reads, and no mutator', () => {
     expect(invocations.map(one => `${one.namespace}/${one.method}`)).toEqual([
       'accountBalance/get',
       'accountBalance/spend',
+      'accountBalance/providers',
     ])
   })
 
-  it('lets the browser call get() with no argument', () => {
+  it('lets the browser call get() with neither argument', () => {
     const get = invocations.find(one => one.method === 'get')
-    expect(get?.parameters).toHaveLength(1)
-    expect(get?.parameters[0]?.acceptsUndefined).toBe(true)
+    expect(get?.parameters).toHaveLength(2)
+    expect(get?.parameters.every(one => one.acceptsUndefined)).toBe(true)
+    expect(get?.parameters.map(one => one.wire)).toEqual(['provider', 'force'])
   })
 
   it('rejects a manifest naming another package', () => {

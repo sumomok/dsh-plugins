@@ -2,17 +2,27 @@
  * Account balance and spend for the DeepSeek Harness web GUI.
  *
  * The question this answers is the one nothing in the harness answers today:
- * *how much is left, and how much has this cost*. The balance comes from the
- * provider's own account endpoint; the spend comes from usage the harness
- * already logs, multiplied by a price table the deployment owns. No pricing
- * page is scraped at runtime, and no number is invented — a model the table
- * does not price is reported as unpriced tokens rather than as zero.
+ * *how much is left, and how much has this cost*. The balance comes from one
+ * provider's own account endpoint — DeepSeek by default, or whichever
+ * provider the current session's selected model belongs to, or whichever
+ * provider the browser's provider picker names — read through the adapter
+ * registry (`adapters.ts`): a named DeepSeek adapter, and a generic
+ * best-effort fallback for any other provider `ctx.llm`'s own
+ * configurable-provider directory can address. The spend ledger is
+ * unaffected by which provider is shown: it stays one installation-wide
+ * account, priced from the one deployment-owned price table, from usage the
+ * harness already logs. No pricing page is scraped at runtime, and no number
+ * is invented — a model the table does not price is reported as unpriced
+ * tokens rather than as zero.
  *
  * What this plugin touches:
  *
- * - The credential seam, once per balance read, for the provider API key. The
- *   key is never cached, never logged, never returned, and never put in a URL.
- * - The provider's configured origin, and nothing else on the network.
+ * - The credential seam, once per balance read, for the queried provider's API
+ *   key. The key is never cached, never logged, never returned, and never put
+ *   in a URL.
+ * - The queried provider's own configured origin, and nothing else on the
+ *   network; a same-origin fence rejects anything a resolved endpoint's own
+ *   arithmetic would otherwise move off it.
  * - Its own directory under the harness home, for a numbers-only spend ledger.
  * - The session-event feed, read-only. It appends no session event of its own.
  *
@@ -23,28 +33,40 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import { credentialRef, isCredentialRefName } from '@deepseek-ai/dsh-credentials'
 import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
-import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 // Type-only: resolves the optional projection registry's Context declaration.
 import type {} from '@deepseek-ai/dsh-session-projection'
-import { balanceEndpoint, BalanceReader, type BalanceRequest } from './balance.ts'
-import { resolveBalanceConfig, type Config, type ResolvedConfig } from './config.ts'
+// Type-only: resolves the `ctx.settings` service declaration.
+import type {} from '@deepseek-ai/dsh-settings'
+import { BALANCE_SETTINGS_NAMESPACE_NAME } from './settings-namespace.ts'
+import { AdapterRegistry, pickableProviderRoster } from './adapters.ts'
+import { Config, resolveBalanceConfig } from './config.ts'
 import { Ledger, ledgerPath, type LedgerRow } from './ledger.ts'
 import { pricesFor, selectPriceCurrency, type PriceEntry, type PriceTable } from './prices.ts'
+import { DEEPSEEK_PROVIDER_ID } from './provider-id.ts'
 import { priceStep, sessionSpendProjection } from './session-spend.ts'
 import { AccountBalanceService } from './service.ts'
-import type { BalanceView, SpendView } from './types.ts'
+import type { BalanceView, ProviderOption, SpendView } from './types.ts'
 
+export { AdapterRegistry, pickableProviderRoster, providerRoster } from './adapters.ts'
 export { balanceEndpoint, BalanceReader, parseAmount, parseBalanceResponse, readBalance, selectBalance } from './balance.ts'
 export type { BalanceReaderOptions, BalanceRequest } from './balance.ts'
 export { Config, resolveBalanceConfig } from './config.ts'
 export type { ResolvedConfig, Surfaces } from './config.ts'
+export { customProviderResolver, findConfigurableEntry } from './custom-provider.ts'
+export { providerResolver } from './deepseek-adapter.ts'
 export { DEFAULT_PRICES } from './default-prices.ts'
+export { createGenericPerform, DEFAULT_GENERIC_ENDPOINTS } from './generic-adapter.ts'
+export type { GenericBalanceRequest, GenericEndpointShape, OneApiQuotaShape, OpenAiBillingShape } from './generic-adapter.ts'
 export { dayKey, hostTimezone, Ledger, LEDGER_DIR, LEDGER_FILE, LEDGER_MODE, ledgerPath, parseLedgerRow } from './ledger.ts'
 export type { LedgerOptions, LedgerRow } from './ledger.ts'
+export {
+  MOONSHOTAI_CN_PROVIDER_ID, MOONSHOTAI_CN_ROUTE, MOONSHOTAI_PROVIDER_ID, MOONSHOTAI_ROUTE, moonshotProviderResolver,
+} from './moonshot-adapter.ts'
+export type { MoonshotRoute } from './moonshot-adapter.ts'
+export { moonshotBalanceEndpoint, parseMoonshotBalanceResponse, readMoonshotBalance } from './moonshot-balance.ts'
+export type { MoonshotBalanceRequest } from './moonshot-balance.ts'
 export {
   costOf, DEFAULT_BASE_SCHEDULE_NAME, isSupportedTimezone, isWallClockTime, pricesFor,
   resolvePriceTable, resolveRates, selectPriceCurrency, wallClockAt, windowContains,
@@ -53,78 +75,20 @@ export type {
   CurrencyPrices, PriceEntry, PriceRates, PriceSchedule, PriceSubject, PriceTable, PriceWindow,
   ResolvedPrice, ResolvedRates, TokenCounts,
 } from './prices.ts'
+export { DEEPSEEK_DISPLAY_NAME, DEEPSEEK_PROVIDER_ID } from './provider-id.ts'
 export { AccountBalanceService } from './service.ts'
 export {
   billingBuckets, priceStep, priceTableVersion, SESSION_SPEND_KEY, sessionSpendProjection, totalTokens,
 } from './session-spend.ts'
 export type { PricedStep, SessionSpendState } from './session-spend.ts'
+export { deriveKeyRef, optionalString, profileAtPath } from './settings-util.ts'
 export type {
-  BalanceUiConfig, BalanceUnavailableReason, BalanceView,
+  BalanceUiConfig, BalanceUnavailableReason, BalanceView, ProviderOption,
   SessionSpend, SessionSpendModel, SpendTotals, SpendView,
 } from './types.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'balance'
-
-/** The settings section this plugin reads the provider connection from. */
-const PROVIDER_SETTINGS = settingsNamespace('llm-deepseek')
-
-/** Credential reference the provider uses when its settings name none. */
-const DEFAULT_API_KEY_ENV = 'DEEPSEEK_API_KEY'
-
-/** Environment variable naming the provider endpoint. */
-const BASE_URL_ENV = 'DEEPSEEK_BASE_URL'
-
-/** Provider endpoint used when neither settings nor the environment name one. */
-const PUBLIC_BASE_URL = 'https://api.deepseek.com'
-
-/** The provider settings fields this plugin reads; every other field is the provider's business. */
-interface ProviderSettings {
-  apiKeyEnv?: unknown
-  baseURL?: unknown
-}
-
-/** Read one optional string from an untyped settings section. */
-function optionalString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.length > 0 ? value : undefined
-}
-
-/**
- * Build the resolver the balance reader calls before every read.
- *
- * Connection facts are re-read per call and the key is resolved per call, both
- * on purpose: a key rotated through the Models page, or an endpoint changed in
- * settings, reaches the next poll without restarting anything.
- * @param ctx - the plugin context.
- * @param config - the resolved plugin config.
- * @returns a resolver yielding the next read's facts, or `null` while unconfigured.
- */
-export function providerResolver(
-  ctx: Context,
-  config: ResolvedConfig,
-): () => Promise<BalanceRequest | null> {
-  return async () => {
-    const section = ctx.get('settings')?.get(PROVIDER_SETTINGS) as ProviderSettings | undefined
-    const apiKeyEnv = optionalString(section?.apiKeyEnv) ?? DEFAULT_API_KEY_ENV
-    if (!isCredentialRefName(apiKeyEnv)) return null
-    const environment = launchEnvironmentOf(ctx)
-    const baseURL = optionalString(section?.baseURL)
-      ?? environment.get(BASE_URL_ENV)?.value
-      ?? PUBLIC_BASE_URL
-    const endpoint = balanceEndpoint(baseURL)
-    if (endpoint === null) return null
-    const ref = credentialRef(apiKeyEnv)
-    const credentials = ctx.get('credentials')
-    // Without the seam there is no managed store to rank against, so the
-    // launching environment is the whole credential plane — the same order the
-    // provider itself resolves in.
-    const apiKey = credentials === undefined
-      ? environment.get(ref)?.value
-      : (await credentials.resolve(ref))?.value
-    if (apiKey === undefined || apiKey.length === 0) return null
-    return { endpoint, apiKey, currency: config.currency, timeoutMs: config.timeoutMs }
-  }
-}
 
 /**
  * Which currency's price list spend is computed against.
@@ -136,8 +100,8 @@ export function providerResolver(
  * everything, so listeners re-register what they derived from the old list.
  */
 export class ActivePrices {
-  private readonly table: PriceTable
-  private readonly preference: readonly string[]
+  private table: PriceTable
+  private preference: readonly string[]
   private readonly listeners = new Set<(currency: string) => void>()
   private code: string
 
@@ -187,36 +151,62 @@ export class ActivePrices {
     this.listeners.add(listener)
     return () => { this.listeners.delete(listener) }
   }
+
+  /**
+   * Replace the price table and currency preference a live settings edit
+   * supplies fresh. Prefers to keep serving whichever currency is already
+   * active — the same priority {@link observe} gives an account's own billing
+   * currency — so editing, say, a USD entry's rates does not reset an account
+   * already settled on CNY back to the preference list's first choice.
+   * @param table - the freshly resolved price table.
+   * @param preference - the freshly resolved currency preference.
+   */
+  update(table: PriceTable, preference: readonly string[]): void {
+    this.table = table
+    this.preference = preference
+    const next = selectPriceCurrency(table, { balanceCurrency: this.code, preference }) ?? this.code
+    if (next === this.code) return
+    this.code = next
+    for (const listener of [...this.listeners]) listener(next)
+  }
 }
 
 /** The concrete provider of the `accountBalance` capability. */
 class BalanceProvider extends AccountBalanceService {
-  private readonly reader: BalanceReader
+  private readonly registry: AdapterRegistry
   private readonly ledger: Ledger
   private readonly active: ActivePrices
 
   /**
    * @param ctx - owning plugin context.
-   * @param reader - the cached balance reader.
+   * @param registry - the adapter registry, one cached reader per provider id.
    * @param ledger - the spend ledger backing the aggregates.
-   * @param active - the active currency selection, which every read updates.
+   * @param active - the active currency selection, which a DeepSeek read updates.
    */
-  constructor(ctx: Context, reader: BalanceReader, ledger: Ledger, active: ActivePrices) {
+  constructor(ctx: Context, registry: AdapterRegistry, ledger: Ledger, active: ActivePrices) {
     super(ctx)
-    this.reader = reader
+    this.registry = registry
     this.ledger = ledger
     this.active = active
   }
 
-  override async get(force?: boolean): Promise<BalanceView> {
-    const view = await this.reader.get(force ?? false)
-    // The read is where the account's own billing currency becomes known.
-    this.active.observe(view)
+  override async get(provider?: string, force?: boolean): Promise<BalanceView> {
+    const id = provider === undefined || provider.length === 0 ? DEEPSEEK_PROVIDER_ID : provider
+    const view = await this.registry.get(id, force ?? false)
+    // The spend ledger prices in one deployment currency, which only
+    // DeepSeek's own account balance may move: previewing another provider
+    // in the picker must not re-price every session's ledger.
+    if (id === DEEPSEEK_PROVIDER_ID) this.active.observe(view)
     return view
   }
 
-  override spend(): Promise<SpendView> {
-    return Promise.resolve(this.ledger.spend(this.active.currency))
+  override spend(provider?: string): Promise<SpendView> {
+    const id = provider === undefined || provider.length === 0 ? DEEPSEEK_PROVIDER_ID : provider
+    return Promise.resolve(this.ledger.spend(this.active.currency, id))
+  }
+
+  override providers(): Promise<ProviderOption[]> {
+    return pickableProviderRoster(this.ctx, this.registry)
   }
 }
 
@@ -283,14 +273,40 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   // deployment mistake, and silently reporting zero spend would hide it.
   await ledger.open()
 
-  const reader = new BalanceReader({
-    resolve: providerResolver(ctx, resolved),
-    now: () => Date.now(),
-    refreshMs: resolved.refreshMs,
-    retryMs: resolved.retryMs,
-    fetch: globalThis.fetch,
+  // The price table and the low/critical-balance thresholds are the fields
+  // the settings section (`client/PriceTableSection.tsx`) exposes, so they
+  // are the only ones re-derived here. Every other field — refresh/retry
+  // windows, generic-adapter endpoint shapes, the ledger's file location,
+  // timezone, and retention — is captured once above and takes effect only
+  // at the next restart, whether changed through this settings document or
+  // by hand in `cordis.yml`; nothing here re-reads them live.
+  let source: () => Config = () => config
+  // `installSection` lives on the live `ctx.settings` service instance now
+  // (the retired `installSettingsSection` free function's replacement), so
+  // this waits on the service the same way the session-projection
+  // registration below waits on `sessionProjections`: a composition without
+  // `dsh-settings` simply never installs this section, and this plugin keeps
+  // running on `config`'s own restart-time values.
+  ctx.inject(['settings'], (settingsCtx) => {
+    settingsCtx.settings.installSection(ctx, BALANCE_SETTINGS_NAMESPACE_NAME, Config, config, {
+      validate: (section) => { resolveBalanceConfig(section, dshHomePath) },
+      setSource: (next) => { source = next },
+      onChange: () => {
+        const live = resolveBalanceConfig(source(), dshHomePath)
+        active.update(live.prices, live.currency)
+        ledger.setUi({
+          footer: live.footer,
+          sessionSpend: live.sessionSpend,
+          lowBalance: live.lowBalance,
+          criticalBalance: live.criticalBalance,
+          refreshMs: live.refreshMs,
+        })
+      },
+    })
   })
-  new BalanceProvider(ctx, reader, ledger, active)
+
+  const registry = new AdapterRegistry(ctx, resolved)
+  new BalanceProvider(ctx, registry, ledger, active)
 
   // Per-session spend is a pure fold the registry replays and caches; the
   // registry is optional, and a composition without it simply has no

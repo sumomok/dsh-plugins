@@ -22,6 +22,12 @@
 # own way of saying that off-peak is half of peak. The two lists describe the
 # same instants in their own timezones: 09:00 Beijing is 01:00 UTC. Keeping
 # these current is the deployment's job; nothing is fetched at runtime.
+#
+# `genericEndpoints` is the candidate endpoint shape list the fallback adapter
+# tries, in order, for any provider but DeepSeek with a configured base URL: a
+# one-api/new-api-shaped user-quota endpoint, then the legacy OpenAI dashboard
+# billing pair. A deployment whose gateway answers neither can replace this
+# list with its own shapes.
 - insert:
     - id: balance
       name: '@sumomok/dsh-balance'
@@ -35,6 +41,14 @@
         ledgerDays: 400
         timezone: ''
         root: ''
+        genericEndpoints:
+          - kind: one-api-quota
+            path: /api/user/self
+            unitsPerCurrency: 500000
+            currency: USD
+          - kind: openai-billing
+            subscriptionPath: /dashboard/billing/subscription
+            usagePath: /dashboard/billing/usage
         surfaces:
           footer: true
           sessionSpend: true

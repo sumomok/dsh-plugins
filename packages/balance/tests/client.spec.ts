@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
-import { parseBalanceView, parseSpendView } from '../src/client/contribution.ts'
-import { currencySymbol, fill, formatAmount, formatSpend, tintOf } from '../src/client/format.ts'
+import { parseBalanceView, parseProviderOptions, parseSpendView } from '../src/client/contribution.ts'
+import { currencySymbol, fill, formatAmount, formatResetAt, formatSpend, remainingPercent, tintOf, windowSpan } from '../src/client/format.ts'
 import { createBalanceStore } from '../src/client/store.ts'
 import { en, zh } from '../src/client/locales.ts'
-import type { BalanceUiConfig, BalanceView, SpendView } from '../src/types.ts'
+import type { BalanceUiConfig, BalanceView, ProviderOption, SpendView } from '../src/types.ts'
 
 const UI: BalanceUiConfig = {
   footer: true,
@@ -27,6 +27,7 @@ function ok(total: string, isAvailable = true): Extract<BalanceView, { state: 'o
 }
 
 const SPEND: SpendView = {
+  provider: 'deepseek-official',
   today: { cost: 1, bySchedule: { peak: 1 }, requests: 1, unpricedTokens: 0 },
   month: { cost: 2, bySchedule: { peak: 2 }, requests: 2, unpricedTokens: 0 },
   allTime: { cost: 3, bySchedule: { peak: 3 }, requests: 3, unpricedTokens: 5 },
@@ -66,6 +67,31 @@ describe('formatting', () => {
   it('fills placeholders and leaves an unknown one alone', () => {
     expect(fill('a {x} b', { x: '1' })).toBe('a 1 b')
     expect(fill('a {y} b', { x: '1' })).toBe('a {y} b')
+  })
+
+  it('turns a used percent into the whole-number percent remaining, clamped', () => {
+    expect(remainingPercent(42)).toBe(58)
+    expect(remainingPercent(4.6)).toBe(95)
+    expect(remainingPercent(0)).toBe(100)
+    expect(remainingPercent(100)).toBe(0)
+    expect(remainingPercent(150)).toBe(0)
+  })
+
+  it('reads a rolling window key as a span, and the weekly key as none', () => {
+    expect(windowSpan('5h')).toEqual({ n: 5, unit: 'hours' })
+    expect(windowSpan('7d')).toEqual({ n: 7, unit: 'days' })
+    expect(windowSpan('1mo')).toEqual({ n: 1, unit: 'months' })
+    expect(windowSpan('30m')).toEqual({ n: 30, unit: 'minutes' })
+    expect(windowSpan('weekly')).toBeNull()
+    expect(windowSpan('window1')).toBeNull()
+  })
+
+  it('shows a reset within the day as a time and a later one with its date', () => {
+    const now = Date.UTC(2026, 8, 2, 8, 0)
+    const soon = formatResetAt(now + 3 * 3_600_000, now)
+    const later = formatResetAt(now + 5 * 86_400_000, now)
+    expect(soon).not.toMatch(/\d+\/\d+/)
+    expect(later).toMatch(/\d+\/\d+|\d+-\d+|月/)
   })
 })
 
@@ -128,47 +154,79 @@ describe('the consumer codecs', () => {
     const noUi = { ...SPEND, ui: undefined }
     expect(() => parseSpendView(noUi)).toThrow(/spend.ui/)
   })
+
+  it('parses the provider roster', () => {
+    expect(parseProviderOptions([{ id: 'deepseek-official', displayName: 'DeepSeek' }]))
+      .toEqual([{ id: 'deepseek-official', displayName: 'DeepSeek' }])
+  })
+
+  it('rejects a roster that is not an array, or a row missing a field', () => {
+    expect(() => parseProviderOptions({})).toThrow(/providers/)
+    expect(() => parseProviderOptions([{ id: 'x' }])).toThrow(/displayName/)
+  })
 })
+
+const PROVIDERS: ProviderOption[] = [
+  { id: 'deepseek-official', displayName: 'DeepSeek' },
+  { id: 'other', displayName: 'Other' },
+]
 
 describe('the browser store', () => {
   const api = () => ({
     get: vi.fn(async () => ok('12.34')),
     spend: vi.fn(async () => SPEND),
+    providers: vi.fn(async () => PROVIDERS),
   })
 
-  it('starts empty and publishes both faces after one refresh', async () => {
+  it('starts empty and publishes every face after one refresh', async () => {
     const calls = api()
     const store = createBalanceStore(calls, () => undefined)
-    expect(store.getSnapshot()).toEqual({ balance: undefined, spend: undefined, loading: false })
-    await store.refresh()
+    expect(store.getSnapshot()).toEqual({
+      followedProvider: '',
+      balance: undefined,
+      spend: undefined,
+      loading: false,
+      providers: [],
+      selectedProvider: undefined,
+      preview: undefined,
+      previewSpend: undefined,
+      previewLoading: false,
+    })
+    await store.refresh('deepseek-official')
+    expect(store.getSnapshot().followedProvider).toBe('deepseek-official')
     expect(store.getSnapshot().balance).toEqual(ok('12.34'))
     expect(store.getSnapshot().spend).toEqual(SPEND)
+    expect(store.getSnapshot().providers).toEqual(PROVIDERS)
+    expect(store.getSnapshot().preview).toEqual(ok('12.34'))
+    expect(store.getSnapshot().previewSpend).toEqual(SPEND)
     expect(store.getSnapshot().loading).toBe(false)
+    expect(calls.get).toHaveBeenCalledWith('deepseek-official', false)
+    expect(calls.spend).toHaveBeenCalledWith('deepseek-official')
   })
 
   it('notifies subscribers and stops after the disposer', async () => {
     const store = createBalanceStore(api(), () => undefined)
     let seen = 0
     const stop = store.subscribe(() => { seen += 1 })
-    await store.refresh()
+    await store.refresh('deepseek-official')
     expect(seen).toBeGreaterThan(0)
     const after = seen
     stop()
-    await store.refresh(true)
+    await store.refresh('deepseek-official', true)
     expect(seen).toBe(after)
   })
 
-  it('shares one unforced refresh between concurrent callers', async () => {
+  it('shares one unforced refresh for the same provider between concurrent callers', async () => {
     const calls = api()
     const store = createBalanceStore(calls, () => undefined)
-    await Promise.all([store.refresh(), store.refresh()])
+    await Promise.all([store.refresh('deepseek-official'), store.refresh('deepseek-official')])
     expect(calls.get).toHaveBeenCalledTimes(1)
   })
 
   it('runs a forced refresh even while one is in flight', async () => {
     const calls = api()
     const store = createBalanceStore(calls, () => undefined)
-    await Promise.all([store.refresh(), store.refresh(true)])
+    await Promise.all([store.refresh('deepseek-official'), store.refresh('deepseek-official', true)])
     expect(calls.get).toHaveBeenCalledTimes(2)
   })
 
@@ -177,12 +235,141 @@ describe('the browser store', () => {
     const store = createBalanceStore(calls, errors)
     const seen: unknown[] = []
     function errors(error: unknown): void { seen.push(error) }
-    await store.refresh()
+    await store.refresh('deepseek-official')
     calls.get.mockRejectedValueOnce(new Error('offline') as never)
-    await store.refresh(true)
+    await store.refresh('deepseek-official', true)
     expect(store.getSnapshot().balance).toEqual(ok('12.34'))
     expect(store.getSnapshot().loading).toBe(false)
     expect(seen).toHaveLength(1)
+  })
+
+  it('ignores a slower followed-provider read settling after a newer one has already landed', async () => {
+    let resolveStale: ((view: BalanceView) => void) | undefined
+    const calls = {
+      get: vi.fn(async (provider: string | undefined): Promise<BalanceView> => {
+        if (provider === 'mock-gateway') {
+          return new Promise<BalanceView>((resolve) => { resolveStale = resolve })
+        }
+        return ok('37.04')
+      }),
+      spend: vi.fn(async () => SPEND),
+      providers: vi.fn(async () => PROVIDERS),
+    }
+    const store = createBalanceStore(calls, () => undefined)
+    // A switch to Mock Gateway starts a slow read, left in flight — resolved
+    // manually below, after a quicker switch back to DeepSeek has landed.
+    const stale = store.refresh('mock-gateway', true)
+    await store.refresh('deepseek-official', true)
+    expect(store.getSnapshot().followedProvider).toBe('deepseek-official')
+    expect(store.getSnapshot().balance).toEqual(ok('37.04'))
+    // The stale Mock Gateway read finally settles; it must not overwrite the
+    // newer DeepSeek state that already landed.
+    resolveStale?.({ state: 'ok', currency: 'USD', total: '4.69', isAvailable: true, fetchedAt: 1, stale: false })
+    await stale
+    expect(store.getSnapshot().followedProvider).toBe('deepseek-official')
+    expect(store.getSnapshot().balance).toEqual(ok('37.04'))
+  })
+})
+
+describe('the provider picker', () => {
+  const api = () => ({
+    get: vi.fn(async (provider: string | undefined) => (provider === 'other' ? { state: 'unconfigured' as const } : ok('12.34'))),
+    spend: vi.fn(async () => SPEND),
+    providers: vi.fn(async () => PROVIDERS),
+  })
+
+  it('mirrors the followed balance until a different provider is chosen', async () => {
+    const store = createBalanceStore(api(), () => undefined)
+    await store.refresh('deepseek-official')
+    expect(store.getSnapshot().preview).toEqual(ok('12.34'))
+    store.selectProvider('deepseek-official')
+    expect(store.getSnapshot().selectedProvider).toBeUndefined()
+  })
+
+  it('reads and shows a different provider — its balance and its own spend — without disturbing the followed reads', async () => {
+    const calls = api()
+    const otherSpend: SpendView = { ...SPEND, provider: 'other', allTime: { cost: 0, bySchedule: {}, requests: 1, unpricedTokens: 9 } }
+    calls.spend.mockImplementation(async (provider: string) => provider === 'other' ? otherSpend : SPEND)
+    const store = createBalanceStore(calls, () => undefined)
+    await store.refresh('deepseek-official')
+    store.selectProvider('other')
+    expect(store.getSnapshot().previewLoading).toBe(true)
+    expect(store.getSnapshot().previewSpend).toBeUndefined()
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(store.getSnapshot().preview).toEqual({ state: 'unconfigured' })
+    expect(store.getSnapshot().previewSpend).toEqual(otherSpend)
+    expect(calls.spend).toHaveBeenCalledWith('other')
+    expect(store.getSnapshot().balance).toEqual(ok('12.34'))
+    expect(store.getSnapshot().spend).toEqual(SPEND)
+    expect(store.getSnapshot().followedProvider).toBe('deepseek-official')
+  })
+
+  it('reverts to following when the picker names the followed provider again', async () => {
+    const store = createBalanceStore(api(), () => undefined)
+    await store.refresh('deepseek-official')
+    store.selectProvider('other')
+    store.selectProvider('deepseek-official')
+    expect(store.getSnapshot().selectedProvider).toBeUndefined()
+    expect(store.getSnapshot().preview).toEqual(ok('12.34'))
+  })
+
+  it('lets a session switch move the preview along once the picker has reverted to following', async () => {
+    const store = createBalanceStore(api(), () => undefined)
+    await store.refresh('deepseek-official')
+    await store.refresh('other')
+    expect(store.getSnapshot().preview).toEqual({ state: 'unconfigured' })
+  })
+
+  it('ignores a slower preview settling after the picker has moved on', async () => {
+    let resolveFirst: (() => void) | undefined
+    const calls = {
+      get: vi.fn(async (provider: string | undefined) => {
+        if (provider === 'other') {
+          await new Promise<void>((resolve) => { resolveFirst = resolve })
+          return { state: 'unconfigured' as const }
+        }
+        return ok('12.34')
+      }),
+      spend: vi.fn(async () => SPEND),
+      providers: vi.fn(async () => PROVIDERS),
+    }
+    const store = createBalanceStore(calls, () => undefined)
+    await store.refresh('deepseek-official')
+    store.selectProvider('other')
+    store.selectProvider('deepseek-official')
+    resolveFirst?.()
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(store.getSnapshot().selectedProvider).toBeUndefined()
+    expect(store.getSnapshot().preview).toEqual(ok('12.34'))
+  })
+})
+
+describe('the followed provider always appears in the roster', () => {
+  it('is prepended, with its own id as a display name, when the host\'s filtered roster omits it', async () => {
+    const calls = {
+      get: vi.fn(async () => ok('12.34')),
+      spend: vi.fn(async () => SPEND),
+      // The host filters to configured/supported providers with no notion of
+      // "followed" — here it happens to have excluded the one being followed.
+      providers: vi.fn(async () => [{ id: 'other', displayName: 'Other' }]),
+    }
+    const store = createBalanceStore(calls, () => undefined)
+    await store.refresh('deepseek-official')
+    expect(store.getSnapshot().providers).toEqual([
+      { id: 'deepseek-official', displayName: 'deepseek-official' },
+      { id: 'other', displayName: 'Other' },
+    ])
+  })
+
+  it('is left alone, not duplicated, when the host\'s roster already names it', async () => {
+    const calls = {
+      get: vi.fn(async () => ok('12.34')),
+      spend: vi.fn(async () => SPEND),
+      providers: vi.fn(async () => PROVIDERS),
+    }
+    const store = createBalanceStore(calls, () => undefined)
+    await store.refresh('deepseek-official')
+    expect(store.getSnapshot().providers).toEqual(PROVIDERS)
   })
 })
 

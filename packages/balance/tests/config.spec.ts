@@ -5,6 +5,7 @@ import { load } from 'js-yaml'
 import { describe, expect, it } from 'vitest'
 import { Config, resolveBalanceConfig } from '../src/config.ts'
 import { DEFAULT_PRICES } from '../src/default-prices.ts'
+import { DEFAULT_GENERIC_ENDPOINTS } from '../src/generic-adapter.ts'
 import { hostTimezone, LEDGER_DIR } from '../src/ledger.ts'
 import type { PriceTable } from '../src/prices.ts'
 
@@ -23,6 +24,14 @@ describe('the schema', () => {
     expect(settled.surfaces).toEqual({ footer: true, sessionSpend: true })
     expect(Object.keys(settled.prices?.tables ?? {}).sort()).toEqual(['CNY', 'USD'])
     expect(settled.prices?.tables.CNY?.entries).toHaveLength(3)
+    expect(settled.genericEndpoints).toEqual(DEFAULT_GENERIC_ENDPOINTS)
+  })
+
+  it('takes a replacement generic-endpoint shape list', () => {
+    const settled = Config({
+      genericEndpoints: [{ kind: 'openai-billing', subscriptionPath: '/x', usagePath: '/y' }],
+    })
+    expect(settled.genericEndpoints).toEqual([{ kind: 'openai-billing', subscriptionPath: '/x', usagePath: '/y' }])
   })
 
   it('rejects a poll faster than the floor, which would hammer the provider', () => {
@@ -122,7 +131,7 @@ describe('the bundle patch', () => {
   it('restates every default, because a profile patch replaces the whole config block', () => {
     for (const key of [
       'refreshMs', 'retryMs', 'timeoutMs', 'currency', 'lowBalance', 'criticalBalance',
-      'ledgerDays', 'timezone', 'root', 'surfaces', 'prices',
+      'ledgerDays', 'timezone', 'root', 'surfaces', 'prices', 'genericEndpoints',
     ]) {
       expect(patch).toContain(`${key}:`)
     }

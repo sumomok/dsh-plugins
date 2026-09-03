@@ -12,7 +12,7 @@
  */
 
 import type { TypertRemoteContribution } from '@deepseek-ai/dsh-typert-protocol'
-import type { BalanceView, SpendTotals, SpendView } from '../types.ts'
+import type { BalanceView, ProviderOption, SpendTotals, SpendView } from '../types.ts'
 
 /** A consumer-side codec: everything the gateway needs is `parse`. */
 interface Codec<T> {
@@ -37,6 +37,12 @@ function asNumber(value: unknown, path: string): number {
 function asString(value: unknown, path: string): string {
   if (typeof value !== 'string') fail(path, 'string')
   return value
+}
+
+/** Narrow an optional string field, distinguishing absence from a wrong type. */
+function asOptionalString(value: unknown, path: string): string | undefined {
+  if (value === undefined) return undefined
+  return asString(value, path)
 }
 
 function asBoolean(value: unknown, path: string): boolean {
@@ -68,16 +74,30 @@ export function parseBalanceView(value: unknown): BalanceView {
     }
   }
   if (view.state !== 'ok') fail('balance.state', 'ok, unconfigured, or unavailable')
+  const granted = asOptionalString(view.granted, 'balance.granted')
+  const toppedUp = asOptionalString(view.toppedUp, 'balance.toppedUp')
   return {
     state: 'ok',
     currency: asString(view.currency, 'balance.currency'),
     total: asString(view.total, 'balance.total'),
-    granted: asString(view.granted, 'balance.granted'),
-    toppedUp: asString(view.toppedUp, 'balance.toppedUp'),
+    ...granted === undefined ? {} : { granted },
+    ...toppedUp === undefined ? {} : { toppedUp },
     isAvailable: asBoolean(view.isAvailable, 'balance.isAvailable'),
     fetchedAt: asNumber(view.fetchedAt, 'balance.fetchedAt'),
     stale: asBoolean(view.stale, 'balance.stale'),
   }
+}
+
+/** Narrow the provider roster. */
+export function parseProviderOptions(value: unknown): ProviderOption[] {
+  if (!Array.isArray(value)) fail('providers', 'array')
+  return (value as unknown[]).map((entry, index) => {
+    const row = asRecord(entry, `providers[${String(index)}]`)
+    return {
+      id: asString(row.id, `providers[${String(index)}].id`),
+      displayName: asString(row.displayName, `providers[${String(index)}].displayName`),
+    }
+  })
 }
 
 function parseTotals(value: unknown, path: string): SpendTotals {
@@ -95,6 +115,7 @@ export function parseSpendView(value: unknown): SpendView {
   const view = asRecord(value, 'spend')
   const ui = asRecord(view.ui, 'spend.ui')
   return {
+    provider: asString(view.provider, 'spend.provider'),
     today: parseTotals(view.today, 'spend.today'),
     month: parseTotals(view.month, 'spend.month'),
     allTime: parseTotals(view.allTime, 'spend.allTime'),
@@ -115,6 +136,8 @@ export function parseSpendView(value: unknown): SpendView {
 const balanceCodec: Codec<BalanceView> = { parse: parseBalanceView }
 const spendCodec: Codec<SpendView> = { parse: parseSpendView }
 const forceCodec: Codec<boolean> = { parse: value => asBoolean(value, 'force') }
+const providerCodec: Codec<string> = { parse: value => asString(value, 'provider') }
+const providersCodec: Codec<ProviderOption[]> = { parse: parseProviderOptions }
 
 /** The contribution `ctx.remote.$mount()` installs, mirroring `../typert.ts`. */
 export const CONTRIBUTION: TypertRemoteContribution = {
@@ -127,6 +150,13 @@ export const CONTRIBUTION: TypertRemoteContribution = {
       method: 'get',
       invocation: { kind: 'direct' as const },
       parameters: [
+        {
+          name: 'provider',
+          wire: 'provider',
+          source: 'json' as const,
+          codec: { mode: 'strict' as const, typeSymbol: '@sumomok/dsh-balance#BalanceProvider', schema: providerCodec },
+          acceptsUndefined: true as const,
+        },
         {
           name: 'force',
           wire: 'force',
@@ -143,8 +173,25 @@ export const CONTRIBUTION: TypertRemoteContribution = {
       namespace: 'accountBalance',
       method: 'spend',
       invocation: { kind: 'direct' as const },
-      parameters: [],
+      parameters: [
+        {
+          name: 'provider',
+          wire: 'provider',
+          source: 'json' as const,
+          codec: { mode: 'strict' as const, typeSymbol: '@sumomok/dsh-balance#BalanceProvider', schema: providerCodec },
+          acceptsUndefined: true as const,
+        },
+      ],
       result: { mode: 'strict' as const, typeSymbol: '@sumomok/dsh-balance#SpendView', schema: spendCodec },
+    },
+    {
+      id: '@sumomok/dsh-balance#accountBalance/providers',
+      service: 'accountBalance',
+      namespace: 'accountBalance',
+      method: 'providers',
+      invocation: { kind: 'direct' as const },
+      parameters: [],
+      result: { mode: 'strict' as const, typeSymbol: '@sumomok/dsh-balance#ProviderOptionList', schema: providersCodec },
     },
   ],
 }

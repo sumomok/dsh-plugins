@@ -5,7 +5,9 @@
  *
  * @module @sumomok/dsh-quote-message/client/reference
  */
-import type { ClientContext, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context } from '@deepseek-ai/cordis'
+import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { ReferenceInsert, TokenSpan } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 // Type-only: pulls the scoped input events (slash/input-insert-reference) into
 // the cordis Events map.
@@ -70,12 +72,28 @@ export function quoteReference(payload: QuotePayload, label: string, clipboardTe
  * @returns whether the input machine applied it (false = stale draft, or no live scope).
  */
 export function insertQuoteReference(
-  ctx: ClientContext,
+  ctx: Context,
   sessionId: SessionId,
   reference: ReferenceInsert,
   input: { readonly draft: string; readonly draftRev: number },
 ): boolean {
-  const actx = ctx.sessions.scope(sessionId)
+  // ctx.sessions is genuinely an ISessions at runtime (registered by
+  // @deepseek-ai/dsh-api-session-controller/client), but this package's
+  // single shared tsconfig compiles the host half (src/index.ts) and the
+  // client half (src/client/**) in one program. The host half's own
+  // dependency chain (transitively, through
+  // @deepseek-ai/dsh-api-session-controller/client -> @deepseek-ai/
+  // dsh-workspace/types -> the bare @deepseek-ai/dsh-session package) also
+  // pulls in @deepseek-ai/dsh-session's OWN Context.sessions: SessionStore
+  // merge (its host-side durable session store, an unrelated service that
+  // happens to share the same cordis service name). skipLibCheck (this
+  // workspace's shared compiler face) does not validate that two merged
+  // Context.sessions declarations agree, so the property silently resolves
+  // to whichever declaration wins internally — SessionStore, not ISessions —
+  // for any file in this compilation. The explicit cast asserts what is
+  // actually true at runtime.
+  const sessions = ctx.sessions as unknown as ISessions
+  const actx = sessions.scope(sessionId)
   if (actx === undefined) return false
   const span: TokenSpan = { ...quoteInsertRange(input), draftRev: input.draftRev }
   return actx.bail(actx, 'slash/input-insert-reference', { reference, span }) === true

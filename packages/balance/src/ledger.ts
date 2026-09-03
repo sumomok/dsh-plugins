@@ -13,12 +13,16 @@
  * that root belongs to the `storage-json` backend, whose children are
  * `<unit>.json` files rather than per-plugin directories.
  *
- * Aggregates are kept per currency and per local day rather than per row: the
- * day buckets are bounded by the retention window, so memory does not grow
- * with the number of requests and startup never holds the whole file. Rows
- * priced in one currency are never folded into another's total — a deployment
- * that switches price lists sees its new currency start from zero rather than
- * inheriting a number in the old one.
+ * Aggregates are kept per provider, per currency, and per local day rather
+ * than per row: the day buckets are bounded by the retention window, so memory
+ * does not grow with the number of requests and startup never holds the whole
+ * file. Rows priced in one currency are never folded into another's total — a
+ * deployment that switches price lists sees its new currency start from zero
+ * rather than inheriting a number in the old one — and rows of one provider
+ * are never folded into another's: the totals read for a provider are what
+ * that route alone cost, so the figure under a provider's balance is its own.
+ * A row that recorded no provider (a request whose source named none) counts
+ * under the empty provider id, which no picker entry reads.
  *
  * @module @sumomok/dsh-balance/ledger
  */
@@ -214,8 +218,8 @@ export interface LedgerOptions {
  * compacts the file to the retention window.
  */
 export class Ledger {
-  private readonly options: LedgerOptions
-  private readonly byCurrency = new Map<string, CurrencyAggregate>()
+  private options: LedgerOptions
+  private readonly byProvider = new Map<string, Map<string, CurrencyAggregate>>()
   /** Serializes appends so two concurrent requests cannot interleave a line. */
   private writes = Promise.resolve()
 
@@ -224,6 +228,18 @@ export class Ledger {
    */
   constructor(options: LedgerOptions) {
     this.options = options
+  }
+
+  /**
+   * Replace the display facts a live settings change supplies fresh — the
+   * balance-coloring thresholds and which footer/session-spend
+   * surfaces are on. File location, clock, timezone, and retention stay fixed
+   * for this ledger's lifetime; only `ui` is ever settings-editable after
+   * construction.
+   * @param ui - the freshly resolved display facts.
+   */
+  setUi(ui: BalanceUiConfig): void {
+    this.options = { ...this.options, ui }
   }
 
   /**
@@ -318,13 +334,15 @@ export class Ledger {
   }
 
   /**
-   * Current day, month, and all-time spend in one currency.
+   * Current day, month, and all-time spend of one provider in one currency.
    * @param currency - the ISO 4217 code of the active price list; rows priced
    * in any other currency are not counted.
+   * @param provider - the provider id whose rows are counted; a provider with
+   * no rows reads as zero.
    * @returns the view the footer popover renders.
    */
-  spend(currency: string): SpendView {
-    const aggregate = this.byCurrency.get(currency)
+  spend(currency: string, provider: string): SpendView {
+    const aggregate = this.byProvider.get(provider)?.get(currency)
     const today = dayKey(this.options.now(), this.options.timezone)
     const month = today.slice(0, 7)
     const dayTotals = emptyTotals()
@@ -338,6 +356,7 @@ export class Ledger {
       mergeTotals(allTime, aggregate.allTime)
     }
     return {
+      provider,
       today: dayTotals,
       month: monthTotals,
       allTime,
@@ -349,17 +368,25 @@ export class Ledger {
     }
   }
 
-  /** ISO 4217 codes this ledger holds rows for. */
+  /** ISO 4217 codes this ledger holds rows for, across every provider. */
   currencies(): readonly string[] {
-    return [...this.byCurrency.keys()].sort()
+    const codes = new Set<string>()
+    for (const byCurrency of this.byProvider.values()) for (const code of byCurrency.keys()) codes.add(code)
+    return [...codes].sort()
   }
 
-  /** Fold one row into its currency's day bucket and all-time totals. */
+  /** Fold one row into its provider's and currency's day bucket and all-time totals. */
   private fold(row: LedgerRow): void {
-    let aggregate = this.byCurrency.get(row.currency)
+    const provider = row.provider ?? ''
+    let byCurrency = this.byProvider.get(provider)
+    if (byCurrency === undefined) {
+      byCurrency = new Map()
+      this.byProvider.set(provider, byCurrency)
+    }
+    let aggregate = byCurrency.get(row.currency)
     if (aggregate === undefined) {
       aggregate = { days: new Map(), allTime: emptyTotals(), oldest: null }
-      this.byCurrency.set(row.currency, aggregate)
+      byCurrency.set(row.currency, aggregate)
     }
     const key = dayKey(row.t, this.options.timezone)
     let bucket = aggregate.days.get(key)

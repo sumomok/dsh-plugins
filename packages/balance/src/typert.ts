@@ -17,7 +17,7 @@
  */
 
 import { z } from 'zod'
-import type { BalanceView, SpendView } from './types.ts'
+import type { BalanceView, ProviderOption, SpendView } from './types.ts'
 
 // The casts below bridge one difference only: with `exactOptionalPropertyTypes`
 // an optional property in these views is `status?: number`, while zod's inferred
@@ -28,8 +28,19 @@ const balanceSchema = z.discriminatedUnion('state', [
     state: z.literal('ok'),
     currency: z.string(),
     total: z.string(),
-    granted: z.string(),
-    toppedUp: z.string(),
+    granted: z.string().optional(),
+    toppedUp: z.string().optional(),
+    isAvailable: z.boolean(),
+    fetchedAt: z.number(),
+    stale: z.boolean(),
+  }),
+  z.object({
+    state: z.literal('quota'),
+    windows: z.array(z.object({
+      key: z.string(),
+      usedPercent: z.number(),
+      resetsAt: z.number().nullable(),
+    })),
     isAvailable: z.boolean(),
     fetchedAt: z.number(),
     stale: z.boolean(),
@@ -51,6 +62,7 @@ const totalsSchema = z.object({
 })
 
 const spendSchema = z.object({
+  provider: z.string(),
   today: totalsSchema,
   month: totalsSchema,
   allTime: totalsSchema,
@@ -68,10 +80,16 @@ const spendSchema = z.object({
 }) as unknown as z.ZodType<SpendView>
 
 const forceSchema = z.boolean()
+const providerSchema = z.string()
+
+const providerOptionSchema = z.object({ id: z.string(), displayName: z.string() })
+const providersResultSchema = z.array(providerOptionSchema) as unknown as z.ZodType<ProviderOption[]>
 
 const balanceCodec = { mode: 'strict', typeSymbol: '@sumomok/dsh-balance#BalanceView', schema: balanceSchema }
 const spendCodec = { mode: 'strict', typeSymbol: '@sumomok/dsh-balance#SpendView', schema: spendSchema }
 const forceCodec = { mode: 'strict', typeSymbol: '@sumomok/dsh-balance#BalanceForce', schema: forceSchema }
+const providerCodec = { mode: 'strict', typeSymbol: '@sumomok/dsh-balance#BalanceProvider', schema: providerSchema }
+const providersCodec = { mode: 'strict', typeSymbol: '@sumomok/dsh-balance#ProviderOptionList', schema: providersResultSchema }
 
 /** The contribution `dsh-typert-loader` registers for this package. */
 export const TYPERT = {
@@ -86,8 +104,11 @@ export const TYPERT = {
       method: 'get',
       invocation: { kind: 'direct' },
       parameters: [
-        // The browser's polling call passes no argument; without
-        // `acceptsUndefined` the gateway's exact-argument match would reject it.
+        // Both arguments are omittable — the browser's polling call passes
+        // neither, and a followed-provider read passes only `force` — so
+        // both need `acceptsUndefined` or the gateway's exact-argument match
+        // would reject the shorter calls.
+        { name: 'provider', wire: 'provider', source: 'json', codec: providerCodec, acceptsUndefined: true },
         { name: 'force', wire: 'force', source: 'json', codec: forceCodec, acceptsUndefined: true },
       ],
       result: balanceCodec,
@@ -98,14 +119,26 @@ export const TYPERT = {
       namespace: 'accountBalance',
       method: 'spend',
       invocation: { kind: 'direct' },
-      parameters: [],
+      parameters: [
+        // Omittable like `get`'s: a call naming no provider reads the DeepSeek route.
+        { name: 'provider', wire: 'provider', source: 'json', codec: providerCodec, acceptsUndefined: true },
+      ],
       result: spendCodec,
+    },
+    {
+      id: '@sumomok/dsh-balance#accountBalance/providers',
+      service: 'accountBalance',
+      namespace: 'accountBalance',
+      method: 'providers',
+      invocation: { kind: 'direct' },
+      parameters: [],
+      result: providersCodec,
     },
   ],
   model: {
     services: [
       {
-        description: 'Read-only DeepSeek account balance and spend (ctx.accountBalance).',
+        description: 'Read-only account balance and spend, any registered provider (ctx.accountBalance).',
         summary: 'Account balance and spend reads.',
         tags: [],
         jsDoc: '/** Read-only account balance and spend capability. */',
@@ -115,16 +148,23 @@ export const TYPERT = {
           {
             kind: 'method',
             name: 'get',
-            signature: 'get(force?: boolean): Promise<BalanceView>',
-            summary: 'Read the provider account balance, from cache unless forced.',
-            jsDoc: '/**\n * The provider\'s account balance.\n * @param force - bypass the refresh and retry windows; an in-flight read is joined rather than duplicated.\n * @returns the balance, or why it cannot be shown.\n */',
+            signature: 'get(provider?: string, force?: boolean): Promise<BalanceView>',
+            summary: 'Read one provider\'s account balance, from cache unless forced.',
+            jsDoc: '/**\n * One provider\'s account balance.\n * @param provider - provider route id; the DeepSeek route when omitted.\n * @param force - bypass the refresh and retry windows; an in-flight read is joined rather than duplicated.\n * @returns the balance, or why it cannot be shown.\n */',
           },
           {
             kind: 'method',
             name: 'spend',
-            signature: 'spend(): Promise<SpendView>',
-            summary: 'Read day, month, and all-time spend from this installation\'s ledger.',
-            jsDoc: '/**\n * Day, month, and all-time spend from this installation\'s own ledger.\n * @returns the totals, their currency, and the price table\'s date.\n */',
+            signature: 'spend(provider?: string): Promise<SpendView>',
+            summary: 'Read one provider\'s day, month, and all-time spend from this installation\'s ledger.',
+            jsDoc: '/**\n * Day, month, and all-time spend of one provider from this installation\'s own ledger.\n * @param provider - provider route id; the DeepSeek route when omitted.\n * @returns the totals, their currency, and the price table\'s date.\n */',
+          },
+          {
+            kind: 'method',
+            name: 'providers',
+            signature: 'providers(): Promise<ProviderOption[]>',
+            summary: 'List the providers this deployment can show a balance for, for the provider picker.',
+            jsDoc: '/**\n * The provider picker\'s roster: every route this deployment could show a\n * balance for right now — statically supported by this plugin\'s adapters,\n * and probed as actually configured with a resolvable credential.\n * @returns the filtered roster; excludes an unsupported or unconfigured\n * route even when the harness\'s own directory lists it.\n */',
           },
         ],
         types: [],

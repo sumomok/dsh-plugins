@@ -11,7 +11,7 @@
  */
 
 import type { ReactNode } from 'react'
-import type { UseProjection } from '@deepseek-ai/dsh-client-runtime/client'
+import type { UseProjection } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: the `balanceSessionSpend` projection key merge.
 import type {} from '../session-spend.ts'

@@ -11,11 +11,11 @@ Harness 把一切都当作插件，它的仓外扩展路径是一等公民：`$D
 | 包 | npm | 做什么 |
 | --- | --- | --- |
 | [`packages/quote-message`](packages/quote-message) | `@sumomok/dsh-quote-message` | 把当前会话中较早的内容作为原生引用 chip 带进输入框，发送后渲染成消息上方的引用卡片。 |
-| [`packages/balance`](packages/balance) | `@sumomok/dsh-balance` | 显示 DeepSeek 账户余额，以及这套安装花掉了多少。 |
+| [`packages/balance`](packages/balance) | `@sumomok/dsh-balance` | 显示当前会话所用服务商的账户余额、这套安装花掉了多少，以及一个通往该服务商充值页的入口。 |
 
 **[`@sumomok/dsh-quote-message`](packages/quote-message)** 让你在写提示词时引用当前会话里较早的内容：在任意聊天消息中选中一段文字，一个原生引用 chip 就把这段文字带进你的提示词，发送时展开成一段 markdown 引用块。发出去之后，引文不会以一串 `>` 留在气泡里，而是渲染成消息上方一张独立的引用卡片——插件遮挡宿主的用户气泡渲染器，气泡本身仍交回给它渲染。它只有浏览器半边——宿主半边是空操作，只为让加载器看到一个真正的 cordis 插件而存在。完整文档：[English](packages/quote-message/README.md) · [中文](packages/quote-message/README.zh.md)。
 
-**[`@sumomok/dsh-balance`](packages/balance)** 在侧边栏底部的设置旁放一个 chip，显示服务商账户里还剩多少，悬停打开的浮层拆解余额，以及这套安装今天、本月和累计花了多少；输入框下方还有一行显示当前会话花了多少。余额是服务商自己给的数字；花费是 Harness 自己记录的 token 用量，乘以一张本部署自己拥有、可从 `cordis.yml` 改的价格表。完整文档：[English](packages/balance/README.md) · [中文](packages/balance/README.zh.md)。
+**[`@sumomok/dsh-balance`](packages/balance)** 在侧边栏底部的设置旁放一个 chip，显示当前会话所选模型所属服务商的账户里还剩多少；悬停打开的浮层拆解该余额，并带一个服务商下拉（覆盖本部署能查到余额的那些）、一个打开该服务商自己收款页的「充值」按钮，以及这套安装今天、本月和累计花了多少；输入框下方还有一行显示当前会话花了多少。余额是服务商自己给的数字；花费是 Harness 自己记录的 token 用量，乘以一张本部署自己拥有、可从 `cordis.yml` 改的价格表。完整文档：[English](packages/balance/README.md) · [中文](packages/balance/README.zh.md)。
 
 ![侧边栏余额 chip、展开的浮层，以及会话消费行](https://raw.githubusercontent.com/sumomok/dsh-plugins/main/assets/balance.gif)
 
@@ -45,7 +45,7 @@ peer 范围写成 `>=0.1.0-rc.1 <0.2.0-0` 而不是 `^0.1.0-rc.7`，因为按 se
 每个包自己的 README 有完整说明，这里是简版。
 
 - **quote-message**——不联网、不碰文件系统、不做任何存储、不写自定义会话事件、不注册宿主路由或服务。被引用的文字只通过你发送的提示词到达模型，宿主把它记录为普通的 `user/message`。
-- **balance**——出站网络只到配置的服务商 origin，别处一概不去；推导后会离开该 origin 的 base URL 会被拒绝而不是发出请求。API key 每次读取时经宿主凭据缝解析一次，以 `Authorization` 头发送，从不记录、缓存、落盘，也不回传给浏览器。它暴露的两个 RPC 方法都是只读的。唯一的磁盘写入是它自己在 `$DSH_HOME/dsh-balance` 下的花费账本。
+- **balance**——出站网络只到配置的服务商 origin，别处一概不去；推导后会离开该 origin 的 base URL 会被拒绝而不是发出请求。API key 每次读取时经宿主凭据缝解析一次，以 `Authorization` 头发送，从不记录、缓存、落盘，也不回传给浏览器。它暴露的三个 RPC 方法都是只读的。唯一的磁盘写入是它自己在 `$DSH_HOME/dsh-balance` 下的花费账本。「充值」按钮只在用户自己点击时，用新的浏览器窗口打开一个硬编码的服务商控制台地址；插件自身从不请求它。
 
 两个插件都不写自定义会话事件类型，所以卸载其中任何一个都不会留下宿主拒绝加载的会话。
 

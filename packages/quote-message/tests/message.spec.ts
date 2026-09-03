@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ConversationNode } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ConversationNode } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { quoteIdentityAt } from '../src/core/message.ts'
 
 function user(seq: number, text: string): ConversationNode {

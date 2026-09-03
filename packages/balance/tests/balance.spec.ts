@@ -186,6 +186,7 @@ describe('BalanceReader', () => {
     }
     const instance = new BalanceReader({
       resolve: options.resolve ?? (() => Promise.resolve(REQUEST)),
+      perform: readBalance,
       now: () => now,
       refreshMs: options.refreshMs ?? 60_000,
       retryMs: options.retryMs ?? 15_000,

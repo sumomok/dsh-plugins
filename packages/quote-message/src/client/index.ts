@@ -17,17 +17,22 @@
  *
  * @module @sumomok/dsh-quote-message/client
  */
+import type { Context } from '@deepseek-ai/cordis'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
-// Type-only: pulls the ui-conversation SlotMap merge (conversation.* slots).
+// Type-only: pulls the ui-conversation SlotMap merge (conversation.* slots)
+// and the Context.uiConversation merge (see identity.ts).
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
-import type { ClientContext, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+// Type-only: pulls the Context.slots merge (`ctx.slots`).
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {
   InputTriggerServiceContract, InputTriggerSource,
 } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import {
   decodeQuoteRef, quoteBlock, serializeQuote, type QuotePayload,
 } from '../core/quote.ts'
+import { createIdentityAt } from './identity.ts'
 import { en, NS, zh, type QuoteKey } from './locales.ts'
 import { QuoteDock } from './QuoteDock.tsx'
 import { createQuotedUserNodeView } from './QuotedUserNodeView.tsx'
@@ -53,7 +58,7 @@ const HOST_NS = 'conversation'
  * Register the selection pill and the codec that expands its chips.
  * @param ctx - client root context.
  */
-export function apply(ctx: ClientContext): void {
+export function apply(ctx: Context): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'quote-message: dictionaries')
   const t = ctx.locale.bind(NS)
 
@@ -92,16 +97,19 @@ export function apply(ctx: ClientContext): void {
     input: { readonly draft: string; readonly draftRev: number },
   ): boolean => insertQuoteReference(ctx, sessionId, referenceFor(payload), input)
 
+  const identityAt = createIdentityAt(ctx)
+
   // A dock entry is the session-scope seat that lives exactly as long as the
-  // chat it watches, and it hands the component the conversation snapshot and
-  // the draft revision the insert needs. The entry itself renders nothing in
-  // the dock row — the pill is portaled to the selection.
+  // chat it watches, and it hands the component the draft revision the
+  // insert needs plus the identity lookup for resolving a selection's chat
+  // row. The entry itself renders nothing in the dock row — the pill is
+  // portaled to the selection.
   ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
     name: 'conversation.input.dock',
     id: 'quote-message',
     order: 900,
     locale: NS,
-    inject: () => ({ quote }),
+    inject: () => ({ quote, identityAt }),
   }, QuoteDock))
 
   // Every header this plugin has ever emitted, so a card drops the line

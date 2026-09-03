@@ -9,6 +9,23 @@
 /** Why a balance read could not produce numbers. */
 export type BalanceUnavailableReason = 'http' | 'network' | 'timeout' | 'malformed'
 
+/**
+ * One usage window's consumption, for a quota-metered provider that reports a
+ * percent consumed rather than a money balance.
+ */
+export interface QuotaWindow {
+  /**
+   * Stable identifier for the window. `weekly` is the primary window the chip
+   * shows; a rolling window carries its own compact span as the key (`5h`).
+   * The UI localizes the keys it knows and shows any other key as written.
+   */
+  key: string
+  /** Percent of this window's allowance already used, 0–100. */
+  usedPercent: number
+  /** Epoch milliseconds when the window's allowance resets, or `null` when the provider names none. */
+  resetsAt: number | null
+}
+
 /** The provider's answer about the account, as the UI needs it. */
 export type BalanceView =
   | {
@@ -17,10 +34,14 @@ export type BalanceView =
     currency: string
     /** Total balance, kept as the provider's decimal string. */
     total: string
-    /** Granted (promotional) portion of the total. */
-    granted: string
-    /** Topped-up (paid) portion of the total. */
-    toppedUp: string
+    /**
+     * Granted (promotional) portion of the total. Only the DeepSeek adapter's
+     * endpoint breaks the total down this way; a generic-adapter read carries
+     * no breakdown, so the popover renders `total` alone for one.
+     */
+    granted?: string
+    /** Topped-up (paid) portion of the total; see {@link granted}. */
+    toppedUp?: string
     /** The provider's own verdict on whether the account can serve requests. */
     isAvailable: boolean
     /** Epoch milliseconds of the read these numbers came from. */
@@ -30,10 +51,34 @@ export type BalanceView =
   }
   | {
     /**
-     * No balance can be asked for: no API key resolves, or the configured
-     * endpoint is not one this plugin may talk to. The UI renders nothing.
+     * No balance can be asked for: no API key resolves, the configured
+     * endpoint is not one this plugin may talk to, no adapter serves this
+     * provider at all, or the generic adapter tried every endpoint shape it
+     * knows and none answered (quietly, not as {@link BalanceUnavailableReason}
+     * — a best-effort provider that answers nothing recognisable is reported
+     * the same way as one nobody configured a key for). The UI renders
+     * nothing for the followed provider, and a short explanatory line for one
+     * explicitly chosen in the provider picker.
      */
     state: 'unconfigured'
+  }
+  | {
+    /**
+     * A subscription quota rather than a money balance: the provider meters
+     * usage in one or more windows, each a percent consumed, with no currency
+     * amount. Only a quota-metered adapter (`kimi-coding`) produces this; a
+     * money adapter never does. The chip shows the first window's used percent;
+     * the popover lists every window.
+     */
+    state: 'quota'
+    /** The metered windows, the chip's primary window first; never empty. */
+    windows: QuotaWindow[]
+    /** The provider's own verdict on whether the account can serve requests. */
+    isAvailable: boolean
+    /** Epoch milliseconds of the read these windows came from. */
+    fetchedAt: number
+    /** Whether this is a retained earlier read served because a refresh failed. */
+    stale: boolean
   }
   | {
     state: 'unavailable'
@@ -44,6 +89,14 @@ export type BalanceView =
     /** Epoch milliseconds of the attempt. */
     fetchedAt: number
   }
+
+/**
+ * A read that produced something to render — a money balance or a usage quota
+ * — before staleness is decided at serve time. Both carry `fetchedAt` and
+ * `stale`, so the reader's cache ({@link file://./balance.ts}) treats them the
+ * same way.
+ */
+export type BalanceSuccessView = Extract<BalanceView, { state: 'ok' | 'quota' }>
 
 /** Spend over one period. */
 export interface SpendTotals {
@@ -78,8 +131,10 @@ export interface BalanceUiConfig {
   refreshMs: number
 }
 
-/** Account-wide spend, as the footer popover renders it. */
+/** One provider's spend on this installation, as the footer popover renders it. */
 export interface SpendView {
+  /** The provider these totals are for: the ledger's rows on that route only. */
+  provider: string
   /** Spend since local midnight. */
   today: SpendTotals
   /** Spend since the first local day of the current month. */
@@ -128,4 +183,18 @@ export interface SessionSpend {
   unpricedTokens: number
   /** Assistant steps folded, priced or not. */
   steps: number
+}
+
+/**
+ * One provider the account-balance provider picker can show, drawn from the
+ * user's own model configuration — the harness's registered routes joined
+ * with every route a settings section declares, active or dormant. Carries
+ * no adapter or configuration fact: whether a read for this id produces a
+ * number is answered by {@link BalanceView}, not by this listing.
+ */
+export interface ProviderOption {
+  /** Provider route id, as used by `AccountBalanceService.get`. */
+  id: string
+  /** Human-readable name for the picker. */
+  displayName: string
 }

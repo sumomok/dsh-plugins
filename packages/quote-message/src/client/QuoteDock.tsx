@@ -14,23 +14,28 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { CSSProperties } from 'react'
-import type { ConversationSnapshot, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { Translate } from '@deepseek-ai/dsh-client-ui-slots'
-import { quoteIdentityAt } from '../core/message.ts'
 import { chatAnchorOf } from '../core/chat-dom.ts'
 import { buildQuotePayload, type QuotePayload } from '../core/quote.ts'
+import type { QuoteIdentity } from './identity.ts'
 import type { QuoteKey } from './locales.ts'
 
 /** What the dock reads off its owner share and its own inject. */
 export interface QuoteDockProps {
-  /** Owner share: the conversation snapshot backing the chat this pill points at. */
-  readonly session: ConversationSnapshot
   /** Owner share: the live input state; the draft names the insert position and the revision guards it. */
   readonly input: { readonly draft: string; readonly draftRev: number }
   /** Framework prop: the session this entry is mounted for. */
   readonly sessionId: SessionId
   /** Framework prop: translate bound to this plugin's namespace. */
   readonly t: Translate<QuoteKey>
+  /**
+   * Injected: message identity of the chat row a given node key anchors,
+   * read from the session's live "chat" Conversation View target — see
+   * `identity.ts`. Undefined when the row is not a message (or is not
+   * resolvable yet).
+   */
+  readonly identityAt: (sessionId: SessionId, nodeKey: string) => QuoteIdentity | undefined
   /** Injected: seat one quote in this session's composer. */
   readonly quote: (
     sessionId: SessionId,
@@ -76,7 +81,7 @@ const PILL_STYLE: CSSProperties = {
  * @param props - owner share, framework props, and the injected insert path.
  * @returns the portaled pill, or null while no chat selection stands.
  */
-export function QuoteDock({ session, input, sessionId, t, quote }: QuoteDockProps) {
+export function QuoteDock({ input, sessionId, t, quote, identityAt }: QuoteDockProps) {
   const [pill, setPill] = useState<PillState | null>(null)
 
   useEffect(() => {
@@ -143,8 +148,7 @@ export function QuoteDock({ session, input, sessionId, t, quote }: QuoteDockProp
   // never read them, so nothing here has to be mirrored into a ref.
   const onQuote = (): void => {
     if (pill === null) return
-    const view = pill.nodeKey === undefined ? undefined : session.chat.nodes.get(pill.nodeKey)
-    const identity = view === undefined ? undefined : quoteIdentityAt(session.nodes, view.anchorSeq)
+    const identity = pill.nodeKey === undefined ? undefined : identityAt(sessionId, pill.nodeKey)
     quote(sessionId, buildQuotePayload({ text: pill.text, ...identity }), input)
     // The selection is consumed: clearing it also keeps the pill from
     // reappearing when this click's own mouseup settles.

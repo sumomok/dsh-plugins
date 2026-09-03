@@ -13,6 +13,7 @@
 
 import z from '@deepseek-ai/schemastery'
 import { DEFAULT_PRICES } from './default-prices.ts'
+import { DEFAULT_GENERIC_ENDPOINTS, type GenericEndpointShape } from './generic-adapter.ts'
 import { hostTimezone, LEDGER_DIR } from './ledger.ts'
 import { isSupportedTimezone, resolvePriceTable, type PriceTable } from './prices.ts'
 
@@ -63,6 +64,14 @@ export interface Config {
    * read. A deployment may add any currency its provider bills in.
    */
   prices?: PriceTable
+  /**
+   * Candidate endpoint shapes the generic fallback adapter tries, in order,
+   * for a provider with no dedicated adapter (any provider but DeepSeek). The
+   * shipped default names the one-api/new-api user-quota convention and the
+   * legacy OpenAI dashboard billing pair; a deployment whose gateway answers
+   * neither can name its own instead.
+   */
+  genericEndpoints?: GenericEndpointShape[]
 }
 
 // No member is `.required()` here: an omitted optional object still resolves
@@ -109,6 +118,21 @@ const prices = z.object({
   tables: z.dict(z.object({ entries: z.array(entry).default([]) })).default({}),
 }) as unknown as z<PriceTable>
 
+const oneApiQuotaShape = z.object({
+  kind: z.const('one-api-quota').required(),
+  path: z.string().required(),
+  unitsPerCurrency: z.number().min(1).required(),
+  currency: z.string().required(),
+})
+
+const openAiBillingShape = z.object({
+  kind: z.const('openai-billing').required(),
+  subscriptionPath: z.string().required(),
+  usagePath: z.string().required(),
+})
+
+const genericEndpointShape = z.union([oneApiQuotaShape, openAiBillingShape]) as unknown as z<GenericEndpointShape>
+
 export const Config: z<Config> = z.object({
   refreshMs: z.number().step(1).min(5_000).default(60_000),
   retryMs: z.number().step(1).min(1_000).default(15_000),
@@ -124,6 +148,7 @@ export const Config: z<Config> = z.object({
     sessionSpend: z.boolean().default(true),
   }).default({ footer: true, sessionSpend: true }),
   prices: prices.default(DEFAULT_PRICES),
+  genericEndpoints: z.array(genericEndpointShape).default([...DEFAULT_GENERIC_ENDPOINTS]),
 }) as z<Config>
 
 /** Configuration after defaults and cross-field checks, with nothing left optional. */
@@ -142,6 +167,8 @@ export interface ResolvedConfig {
   footer: boolean
   sessionSpend: boolean
   prices: PriceTable
+  /** Candidate endpoint shapes the generic fallback adapter tries, in order. */
+  genericEndpoints: readonly GenericEndpointShape[]
 }
 
 /**
@@ -214,5 +241,6 @@ export function resolveBalanceConfig(
     footer: config.surfaces?.footer ?? true,
     sessionSpend: config.surfaces?.sessionSpend ?? true,
     prices: resolvePriceTable(compactPriceTable(config.prices ?? DEFAULT_PRICES)),
+    genericEndpoints: config.genericEndpoints ?? DEFAULT_GENERIC_ENDPOINTS,
   }
 }

@@ -16,7 +16,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
-import type { BalanceView, SpendView } from './types.ts'
+import type { BalanceView, ProviderOption, SpendView } from './types.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -35,37 +35,61 @@ export abstract class AccountBalanceService extends TypertRemoteService {
   }
 
   /**
-   * The provider's account balance.
+   * One provider's account balance.
+   * @param provider - provider route id; the DeepSeek route when omitted.
    * @param force - bypass the refresh and retry windows; an in-flight read is
    * joined rather than duplicated.
    * @returns the balance, or why it cannot be shown.
    */
-  abstract get(force?: boolean): Promise<BalanceView>
+  abstract get(provider?: string, force?: boolean): Promise<BalanceView>
 
   /**
-   * Day, month, and all-time spend from this installation's own ledger.
+   * Day, month, and all-time spend of one provider from this installation's
+   * own ledger: what that route alone cost, so the figure sits under that
+   * provider's balance.
+   * @param provider - provider route id; the DeepSeek route when omitted.
    * @returns the totals, their currency, and the price table's date.
    */
-  abstract spend(): Promise<SpendView>
+  abstract spend(provider?: string): Promise<SpendView>
+
+  /**
+   * The provider picker's roster: every route this deployment could show a
+   * balance for right now — statically supported by this plugin's adapters,
+   * and probed as actually configured with a resolvable credential.
+   * @returns the filtered roster; excludes an unsupported or unconfigured
+   * route even when the harness's own directory lists it.
+   */
+  abstract providers(): Promise<ProviderOption[]>
 
   /**
    * Remote face of {@link AccountBalanceService.get}; the decorator cannot mark
    * the abstract member, so this concrete adapter carries the identical contract.
+   * @param provider - provider route id; the DeepSeek route when omitted.
    * @param force - bypass the refresh and retry windows.
    * @returns the balance, or why it cannot be shown.
    */
   @Remote('get')
-  remoteExportGet(force?: boolean): Promise<BalanceView> {
-    return this.get(force)
+  remoteExportGet(provider?: string, force?: boolean): Promise<BalanceView> {
+    return this.get(provider, force)
   }
 
   /**
    * Remote face of {@link AccountBalanceService.spend}.
+   * @param provider - provider route id; the DeepSeek route when omitted.
    * @returns the totals, their currency, and the price table's date.
    */
   @Remote('spend')
-  remoteExportSpend(): Promise<SpendView> {
-    return this.spend()
+  remoteExportSpend(provider?: string): Promise<SpendView> {
+    return this.spend(provider)
+  }
+
+  /**
+   * Remote face of {@link AccountBalanceService.providers}.
+   * @returns the filtered roster.
+   */
+  @Remote('providers')
+  remoteExportProviders(): Promise<ProviderOption[]> {
+    return this.providers()
   }
 }
 

@@ -34,9 +34,10 @@ describe('the manifest', () => {
 
   it('declares every client package whose service or slot map it depends on', () => {
     expect(manifest.dsh.client.inject).toEqual([
-      '@deepseek-ai/dsh-client-runtime',
+      '@deepseek-ai/dsh-api-session-controller',
       '@deepseek-ai/dsh-client-ui-input-trigger',
       '@deepseek-ai/dsh-client-ui-conversation',
+      '@deepseek-ai/dsh-client-ui-renderer',
       '@deepseek-ai/dsh-client-ui-slots',
       '@deepseek-ai/dsh-client-locale',
     ])

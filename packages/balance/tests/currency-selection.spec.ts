@@ -3,7 +3,16 @@ import type { TokenUsage } from '@deepseek-ai/dsh-llm'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { DEFAULT_PRICES } from '../src/default-prices.ts'
 import { ActivePrices, ledgerRowOf } from '../src/index.ts'
+import type { PriceTable } from '../src/prices.ts'
 import type { BalanceView } from '../src/types.ts'
+
+/** A one-currency table distinct from {@link DEFAULT_PRICES}, for `update()` tests. */
+const USD_ONLY: PriceTable = {
+  asOf: '2026-09-01',
+  tables: {
+    USD: { entries: [{ model: 'm', per: 1_000_000, base: { input: 1, inputCacheHit: 0.5, output: 2 }, timezone: 'UTC' }] },
+  },
+}
 
 /** A Wednesday at 12:00 UTC — outside DeepSeek's peak windows in both currencies. */
 const OFF_PEAK = Date.UTC(2026, 7, 19, 12, 0)
@@ -84,6 +93,33 @@ describe('ActivePrices', () => {
     stop()
     active.observe(balance('CNY'))
     expect(seen).toBe(0)
+  })
+
+  it('keeps serving the active currency across a settings edit that still prices it', () => {
+    const active = new ActivePrices(DEFAULT_PRICES, ['USD'])
+    active.observe(balance('CNY'))
+    expect(active.currency).toBe('CNY')
+    active.update(DEFAULT_PRICES, ['USD'])
+    expect(active.currency).toBe('CNY')
+  })
+
+  it('falls back to the fresh preference once a settings edit drops the active currency', () => {
+    const active = new ActivePrices(DEFAULT_PRICES, ['USD'])
+    active.observe(balance('CNY'))
+    expect(active.currency).toBe('CNY')
+    active.update(USD_ONLY, ['USD'])
+    expect(active.currency).toBe('USD')
+    expect(active.entries[0]?.base.input).toBe(1)
+  })
+
+  it('notifies listeners only when the edit actually changes the active currency', () => {
+    const active = new ActivePrices(DEFAULT_PRICES, ['CNY'])
+    const seen: string[] = []
+    active.onChange(currency => seen.push(currency))
+    active.update(DEFAULT_PRICES, ['CNY'])
+    expect(seen).toEqual([])
+    active.update(USD_ONLY, ['USD'])
+    expect(seen).toEqual(['USD'])
   })
 })
 
