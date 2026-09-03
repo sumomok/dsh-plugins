@@ -45,8 +45,13 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   }
 }
 
-/** Services required by this plugin. */
-export const inject = ['slots', 'locale', 'sessions', 'inputTriggers']
+/**
+ * Services required by this plugin. Every name a `ctx.<name>` property read
+ * reaches must be listed here — the context proxy throws on any other name —
+ * so `uiConversation` is present for `identity.ts`, which is the one call site
+ * that reads chat node data off it.
+ */
+export const inject = ['slots', 'locale', 'sessions', 'inputTriggers', 'uiConversation']
 
 /** The host node kinds whose bubble carries a user's own prompt. */
 type UserNodeKey = 'user' | 'steering'

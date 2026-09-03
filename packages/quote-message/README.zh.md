@@ -61,7 +61,7 @@ chip 和内置的 `@file` / `@session` chip 一样渲染——同样的高度、
 ```sh
 pnpm run build
 cd packages/quote-message && pnpm pack --pack-destination ../../dist
-dsh plugin --profile <name> add ../../dist/sumomok-dsh-quote-message-0.2.2.tgz
+dsh plugin --profile <name> add ../../dist/sumomok-dsh-quote-message-0.3.1.tgz
 ```
 
 发布之后，`dsh plugin --profile <name> add @sumomok/dsh-quote-message` 从 npm 装同一份东西。
